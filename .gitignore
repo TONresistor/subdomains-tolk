@@ -1,0 +1,25 @@
+# Acton toolchain / stdlib (reinstalled by `acton build`)
+.acton/
+
+# Build artifacts & generated embed-code
+build/
+gen/
+
+# Reference clones (regenerate via the commands in source-func/README if needed); they carry their own .git
+source-func/
+
+# OS
+.DS_Store
+
+# Frontend dApp, tracked in its own repo (front-subdomain-dev)
+frontend/
+
+# Internal docs, not published (kept locally only)
+context.md
+DEPLOYMENT.md
+GOAL.md
+SPEC.md
+
+# Coverage / gas analysis artifacts
+coverage.txt
+*.lcov

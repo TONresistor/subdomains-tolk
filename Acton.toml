@@ -1,0 +1,49 @@
+[package]
+name = "tolk-subdomains"
+description = "Subdomain-as-a-Service on TON: factory-of-factories (Tolk/Acton)."
+version = "1.0.0"
+license = "MIT"
+
+[toolchain]
+acton = "1.1.0-trunk"
+
+# Tier 2: one NFT per subdomain
+[contracts.SubdomainItem]
+src = "contracts/SubdomainItem.tolk"
+depends = []
+
+# Tier 1: one registry per parent domain; embeds the Item code
+[contracts.SubdomainCollection]
+src = "contracts/SubdomainCollection.tolk"
+
+[[contracts.SubdomainCollection.depends]]
+name = "SubdomainItem"
+kind = "embed_code"
+function = "subdomainItemCompiledCode"
+
+# Tier 0: global master; embeds the Collection code
+[contracts.SubdomainFactory]
+src = "contracts/SubdomainFactory.tolk"
+
+[[contracts.SubdomainFactory.depends]]
+name = "SubdomainCollection"
+kind = "embed_code"
+function = "subdomainCollectionCompiledCode"
+
+[lint]
+max-warnings = 0
+
+[lint.rules]
+dict-type-use = "allow"
+throw-requires-errors-enum = "allow"
+
+[fmt]
+width = 100
+ignore = []
+
+[import-mappings]
+acton = ".acton"
+contracts = "contracts"
+gen = "gen"
+tests = "tests"
+wrappers = "wrappers"
