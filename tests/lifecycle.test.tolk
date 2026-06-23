@@ -91,8 +91,9 @@ get fun `test resolve: item returns its own wallet record`() {
     val (coll, parent, owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice");
 
-    // setWalletToMinter=true => querying the item's own "." with the wallet category returns a record
-    val walletResolved = item.dnsresolve(makeDotSlice(), CAT_WALLET);
+    // TEP-81 regression: query with the LITERAL sha256("wallet") (what wallets/tonapi use), not the
+    // CAT_WALLET constant — proves the default wallet record is keyed standard, not `.toBase256()`.
+    val walletResolved = item.dnsresolve(makeDotSlice(), 0xe8d44050873dba865aa7c170ab4cce64d90839a34dcfd6cf71d14e0205443b1b);
     expect(walletResolved.resolvedPrefixLengthBits).toEqual(BYTE_SIZE);
     expect(walletResolved.resolvedRecord).toBeNotNull();
 }

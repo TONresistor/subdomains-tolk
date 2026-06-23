@@ -8,10 +8,15 @@ const DNS_NEXT_RESOLVER_PREFIX = 0xba93
 
 const MAX_DOMAIN_SIZE = 126 // minimum is per-registry (PriceConfig.minChars)
 
-const CAT_DNS_NEXT_RESOLVER = "dns_next_resolver".toBase256()
-const CAT_WALLET = "wallet".toBase256()
-const CAT_SITE = "site".toBase256()
-const CAT_STORAGE = "dns_storage_address".toBase256()
+// TEP-81: a record's dict key is sha256(category-name), NOT the raw bytes. Using `.toBase256()`
+// here (raw ASCII as int) silently breaks interop: standard resolvers (root .ton, tonapi, wallets)
+// look records up by sha256, so a next_resolver/wallet pinned under the raw key is invisible to
+// them and top-down resolution dead-ends at the parent. Verified against a live witness (4044.ton)
+// whose next_resolver sits under sha256("dns_next_resolver") = 0x19f02441…
+const CAT_DNS_NEXT_RESOLVER = "dns_next_resolver".sha256()
+const CAT_WALLET = "wallet".sha256()
+const CAT_SITE = "site".sha256()
+const CAT_STORAGE = "dns_storage_address".sha256()
 
 fun address.forceBasechain(self) {
     assert (self.getWorkchain() == BASECHAIN) throw ERROR_WRONG_WORKCHAIN;

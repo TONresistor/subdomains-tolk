@@ -58,6 +58,11 @@ get fun `test audit4: landing pin is a SET (ref present), pointing to self`() {
         TlbEitherRight => b.value.load(),
     };
     expect(cdr.key).toEqual(CAT_DNS_NEXT_RESOLVER);
+    // TEP-81 regression: the pin key MUST be sha256("dns_next_resolver"), the value standard
+    // resolvers (root .ton, tonapi, wallets) look up. Asserting the LITERAL (not just the
+    // constant) catches a silent regression to `.toBase256()`, which made the pin invisible to
+    // top-down resolution and dead-ended every subdomain at the parent.
+    expect(cdr.key).toEqual(0x19f02441ee588fdb26ee24b2568dd035c3c9206e11ab979be62e55558a1d17ff);
     var rec = cdr.value;
     expect(rec.remainingRefsCount()).toEqual(1); // SET, not DELETE
     expect(parseNextResolverCell(rec.loadRef())).toEqual(coll.address);
