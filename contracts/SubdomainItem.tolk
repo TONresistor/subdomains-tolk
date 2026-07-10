@@ -6,7 +6,7 @@ import "storage"
 
 contract SubdomainItem {
     author: "tolk-subdomains"
-    version: "1.3.0"
+    version: "2.0.0"
     description: "Subdomain NFT item (TEP-62) holding its own DNS records."
     incomingMessages: AllowedItemMessage
     storage: ItemStorageInitialized

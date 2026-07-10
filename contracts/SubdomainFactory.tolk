@@ -38,7 +38,7 @@ fun FactoryStorage.save(self) {
 
 contract SubdomainFactory {
     author: "tolk-subdomains"
-    version: "1.3.0"
+    version: "2.0.0"
     description: "Global factory for permanent Locked and self-custody Linked subdomain collections."
     incomingMessages: AllowedFactoryMessage
     storage: FactoryStorage

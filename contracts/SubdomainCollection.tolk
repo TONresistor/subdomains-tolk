@@ -8,7 +8,7 @@ import "storage"
 
 contract SubdomainCollection {
     author: "tolk-subdomains"
-    version: "1.3.0"
+    version: "2.0.0"
     description: "Per-domain registry with Locked or Linked parent custody, minting, DNS and transferable admin."
     incomingMessages: AllowedCollectionMessage
     storage: CollectionStorage

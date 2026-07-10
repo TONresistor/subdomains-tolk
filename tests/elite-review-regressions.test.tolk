@@ -1,4 +1,4 @@
-// Regressions for the final v1.3.0 contract review: standards compatibility, authenticated
+// Regressions for the final v2.0.0 contract review: standards compatibility, authenticated
 // deployment acknowledgements, rich-bounce recovery, and previously surviving critical mutants.
 import "@acton/emulation/network"
 import "@acton/emulation/testing"

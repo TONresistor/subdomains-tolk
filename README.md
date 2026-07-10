@@ -119,10 +119,10 @@ Factory create entry points:
 
 | | Address |
 |---|---|
-| **Production factory (v1.3 Locked + Linked)** | `EQApI7v_L89-tdFN4uVug4aCUcPtD42vfudQ7AhBFlLBWO3c` |
+| **Production factory (v2.0 Locked + Linked)** | `EQApI7v_L89-tdFN4uVug4aCUcPtD42vfudQ7AhBFlLBWO3c` |
 | Legacy factory (v1.1 Locked) | `EQBpE2VuJEGMNSRak7cQCHelIsyZKyQFddIsyhmkV0vdHuJs` |
 
-v1.3.0 was deployed on mainnet on 2026-07-10 in transaction
+v2.0.0 was deployed on mainnet on 2026-07-10 in transaction
 [`cfccc7b1…60745f`](https://tonscan.org/tx/cfccc7b1d8247c40e863f555cd805004974256ed1b295d6f5e2d02ebff60745f).
 The registry migration was applied first, then the production frontend was atomically repointed via
 `NEXT_PUBLIC_FACTORY_ADDRESS`.
