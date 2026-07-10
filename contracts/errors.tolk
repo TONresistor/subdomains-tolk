@@ -14,6 +14,7 @@ const ERROR_LABEL_TAKEN = 207
 const ERROR_WRONG_WORKCHAIN = 211
 const ERROR_RESCUE_PARENT_FORBIDDEN = 212
 const ERROR_NULL_OLD_OWNER = 213
+const ERROR_LINKED_NO_CUSTODY = 214 // a custody op was called on a Linked (self-custody) collection
 const ERROR_INDEX_MISMATCH = 220
 
 // Ownership / access

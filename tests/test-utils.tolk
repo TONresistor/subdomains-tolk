@@ -1,20 +1,14 @@
 // Shared test fixtures for the subdomain platform.
-import "@acton/build"
-import "@acton/emulation/config"
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
-import "@acton/types/message"
 import "@acton/types/transaction"
-import "../contracts/dns-utils"
-import "../contracts/errors"
-import "../contracts/messages"
-import "../contracts/prices"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
-import "../wrappers/SubdomainFactory.gen"
-import "../wrappers/SubdomainItem.gen"
+import "@contracts/dns-utils"
+import "@contracts/messages"
+import "@contracts/prices"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainItem.gen"
 
 fun newActor(name: string, topUp: coins = ton("1000")): Treasury {
     val actor = testing.treasury(name);
@@ -95,6 +89,8 @@ fun deployLockedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
     val coll = SubdomainCollection.fromStorage({
         master: masterT.address,
         parentDomain: parent.address,
+        isLinked: false,
+        linkedAdmin: masterT.address,
     });
     coll.deploy(masterT.address, { value: ton("0.05"), bounce: false }); // bare skeleton
     expect(testing.isDeployed(coll.address)).toEqual(true);
@@ -104,13 +100,51 @@ fun deployLockedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
         masterT.address,
         LockCollection {
             queryId: 1,
+            parentDomain: parent.address,
             admin: owner.address,
+            isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
         { value: ton("1"), bounce: false },
     );
     expect(lockRes).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getAdmin()).toEqual(owner.address);
+
+    return (coll, parent, owner, user);
+}
+
+// Same as deployLockedCollection but in Linked (self-custody) mode: the skeleton carries
+// isLinked=true, so the collection lives at its own address and never takes custody of the parent.
+// The "owner" keeps the parent .ton; here `parent` stands in for that still-owner-held .ton.
+fun deployLinkedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury) {
+    val masterT = newActor("master", ton("100"));
+    val parent = newActor("parent", ton("100"));
+    val owner = newActor("owner", ton("100"));
+    val user = newActor("user", ton("10000"));
+
+    val coll = SubdomainCollection.fromStorage({
+        master: masterT.address,
+        parentDomain: parent.address,
+        isLinked: true,
+        linkedAdmin: owner.address,
+    });
+    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
+    expect(coll.getIsLinked()).toEqual(false); // not locked yet -> default false
+
+    val lockRes = coll.sendAny(
+        masterT.address,
+        LockCollection {
+            queryId: 1,
+            parentDomain: parent.address,
+            admin: owner.address,
+            isLinked: true,
+            meta: makeMeta().toCell(),
+        }.toCell(),
+        { value: ton("1"), bounce: false },
+    );
+    expect(lockRes).toHaveSuccessfulTx({ to: coll.address });
+    expect(coll.getAdmin()).toEqual(owner.address);
+    expect(coll.getIsLinked()).toEqual(true); // self-custody mode
 
     return (coll, parent, owner, user);
 }

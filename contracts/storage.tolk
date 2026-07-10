@@ -8,17 +8,16 @@ const MIN_TONS_FOR_STORAGE = ton("0.05")
 const ITEM_DEPLOY_COST = ton("0.07")
 const MINT_FEE_BUFFER = ton("0.03")
 const COLLECTION_MIN_BALANCE = ton("0.05")
-const LEASE_RESERVE = ton("0.3")
 const COLLECTION_DEPLOY_VALUE = ton("0.25")
+const FACTORY_READY_VALUE = ton("0.01")
 const FACTORY_GAS_MARGIN = ton("0.01")
 const RESOLVER_PIN_FUND = ton("0.1")
 const MIN_CREATE_VALUE = ton("0.5")
-const PARENT_FILL_AMOUNT = ton("0.2")
+const MIN_PARENT_FILL = ton("0.05") // min incoming value for a caller-funded parent renew
 const FWD_FEE_RESERVE = ton("0.02")
 const ONE_YEAR = 31622400
 const PARENT_HEARTBEAT_INTERVAL = 86400 // 1 day
 const PARENT_HEARTBEAT_AMOUNT = ton("0.01")
-const PER_NAME_RENT_RESERVE = ton("0.003")
 
 // ---- DNS records (TEP-81) ----
 type DnsRecords = map<uint256, cell>
@@ -43,6 +42,10 @@ struct DnsResolveResponse {
 struct CollectionSkeleton {
     master: address
     parentDomain: address
+    // Part of StateInit: Linked and Locked cannot pre-occupy each other's address.
+    isLinked: bool
+    // Creator binding prevents third-party pre-deployment of a Linked collection.
+    linkedAdmin: address
 }
 
 struct CollectionMeta {
@@ -51,10 +54,28 @@ struct CollectionMeta {
     itemContentBaseUri: cell // offchain prefix for items
 }
 
+struct CollectionOrigin {
+    linkedAdmin: address
+    isLinkedAtDeployment: bool
+    lastFactoryHandoff: Cell<FactoryHandoffReceipt>?
+}
+
+// Receipt used to recover a lost factory handoff callback.
+struct FactoryHandoffReceipt {
+    deploymentId: uint64
+    requestQueryId: uint64
+    intendedAdmin: address
+    returnRequired: bool
+}
+
 struct CollectionStorage {
     master: address
     parentDomain: address
     admin: address
+    // Immutable address witness plus the latest handoff receipt.
+    origin: Cell<CollectionOrigin>
+    // true = Linked; false = terminal Locked custody.
+    isLinked: bool
     lastParentFillUp: uint32
     meta: Cell<CollectionMeta>
     reserved: map<uint256, ()>
@@ -152,8 +173,15 @@ fun calcDeployedItem(index: uint256, itemCode: cell): AutoDeployAddress {
 fun calcDeployedCollection(
     master: address,
     parentDomain: address,
+    isLinked: bool,
+    linkedAdmin: address,
     collectionCode: cell,
 ): AutoDeployAddress {
-    val skeleton: CollectionSkeleton = { master, parentDomain };
+    val skeleton: CollectionSkeleton = {
+        master,
+        parentDomain,
+        isLinked,
+        linkedAdmin,
+    };
     return { workchain: BASECHAIN, stateInit: { code: collectionCode, data: skeleton.toCell() } };
 }

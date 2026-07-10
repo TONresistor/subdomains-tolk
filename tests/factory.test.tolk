@@ -1,13 +1,12 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
+import "@acton/tlb/either"
 import "@acton/types/transaction"
+import "@contracts/messages"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainFactory.gen"
 import "test-utils"
-import "../contracts/messages"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
-import "../wrappers/SubdomainFactory.gen"
 
 // 1-tx create: a `.ton` transferred in to the factory (carrying a config payload) deploys a
 // locked collection at the deterministic address and hands the `.ton` over to it, all in one transaction.
@@ -15,7 +14,7 @@ get fun `test factory: create deploys a locked collection + hands off the .ton`(
     val owner = newActor("fowner");
     val parent = newActor("fparent"); // stand-in for the parent .ton DnsItem
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val expectedColl = factory.getCollectionAddress(parent.address);
@@ -42,9 +41,21 @@ get fun `test factory: create deploys a locked collection + hands off the .ton`(
     expect(coll.getAdmin()).toEqual(owner.address);
 
     // the `.ton` was handed off (factory -> parent DnsItem, a TransferOwnership)
-    expect(
-        res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
-    ).toBeNotNull();
+    val handoffTx = res.findTransaction<TransferOwnership>({
+        from: factory.address,
+        to: parent.address,
+    });
+    expect(handoffTx).toBeNotNull();
+    val transferBody = handoffTx!.loadInMsg<TransferOwnership>().body;
+    val transfer = match (transferBody) {
+        TlbEitherLeft => transferBody.value,
+        TlbEitherRight => transferBody.value.load(),
+    };
+    var proofPayload = transfer.transferData.forwardPayload;
+    expect(proofPayload.loadBool()).toEqual(true);
+    val proof = FactoryHandoff.fromCell(proofPayload.loadRef());
+    expect(proof.intendedAdmin).toEqual(owner.address);
+    expect(transfer.transferData.responseDestination).toEqual(owner.address);
     expect(factory.getDeployedCount()).toEqual(1);
 }
 
@@ -52,7 +63,7 @@ get fun `test factory: underfunded create returns the .ton, deploys nothing`() {
     val owner = newActor("fowner2");
     val parent = newActor("fparent2");
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val payload = beginCell().storeRef(makeMeta().toCell()).endCell().beginParse();
@@ -77,7 +88,7 @@ get fun `test factory: two parents get two distinct collections`() {
     val parentA = newActor("parentA");
     val parentB = newActor("parentB");
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(deployer.address, { value: ton("1"), bounce: false });
 
     val addrA = factory.getCollectionAddress(parentA.address);

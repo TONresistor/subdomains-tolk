@@ -1,13 +1,12 @@
 // Mint a subdomain on a locked collection.
 // Run: COLLECTION_ADDRESS=... LABEL=alice acton script scripts/mint.tolk
-import "@stdlib/strings"
 import "@acton/env"
 import "@acton/io"
 import "@acton/emulation/network"
 import "@acton/emulation/scripts"
-import "../contracts/dns-utils"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
+import "@contracts/dns-utils"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
 
 fun main() {
     val minter = scripts.wallet("prod-deployer");

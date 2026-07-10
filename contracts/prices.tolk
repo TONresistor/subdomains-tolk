@@ -1,6 +1,4 @@
 // Pricing by label character count. Chosen at creation, immutable thereafter.
-import "dns-utils"
-
 // One price per length: p1 (1-char) .. p10 (10-char), then pRest (11+). Short names are the most
 // premium, so the grid is non-increasing. minChars gates the shortest mintable length.
 // 11 coins fit one cell for any realistic price (even 10M TON/name is ~712 bits < 1023); the

@@ -1,15 +1,12 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
+import "@contracts/errors"
+import "@wrappers/SubdomainCollection.gen"
 import "test-utils"
-import "../contracts/errors"
-import "../contracts/messages"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
 
 get fun `test register: insufficient value is rejected`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     // price("alice"=5) = 5 TON, + ITEM_DEPLOY_COST 0.07 + MINT_FEE_BUFFER 0.03 = 5.1 required ; send 2
     val res = coll.sendRegisterSubdomain(
         user.address,
@@ -23,7 +20,7 @@ get fun `test register: insufficient value is rejected`() {
 }
 
 get fun `test register: too-short label is rejected`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val res = coll.sendRegisterSubdomain(
         user.address,
         1,
@@ -36,7 +33,7 @@ get fun `test register: too-short label is rejected`() {
 }
 
 get fun `test register: invalid characters are rejected`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val res = coll.sendRegisterSubdomain(
         user.address,
         1,
@@ -49,7 +46,7 @@ get fun `test register: invalid characters are rejected`() {
 }
 
 get fun `test register: reserved label blocks non-admin but allows admin`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, owner, user) = deployLockedCollection();
     val idx = labelIndex("vip");
     // admin reserves "vip"
     val reserveRes = coll.sendSetLabelReserved(
@@ -84,10 +81,24 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         { value: ton("50"), bounce: true },
     );
     expect(adminTry).toHaveSuccessfulTx({ to: coll.address });
+
+    // The false branch must delete a reservation, not silently keep it.
+    val released = labelIndex("release");
+    coll.sendSetLabelReserved(owner.address, 3, released, true, { value: ton("1"), bounce: true });
+    coll.sendSetLabelReserved(owner.address, 4, released, false, { value: ton("1"), bounce: true });
+    val releasedMint = coll.sendRegisterSubdomain(
+        user.address,
+        5,
+        labelSlice("release"),
+        true,
+        null,
+        { value: ton("50"), bounce: true },
+    );
+    expect(releasedMint).toHaveSuccessfulTx({ to: coll.address });
 }
 
 get fun `test admin: transfer admin role, old admin loses rights`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, owner, _user) = deployLockedCollection();
     val newAdmin = newActor("newadmin");
 
     val res = coll.sendTransferAdmin(
@@ -111,7 +122,7 @@ get fun `test admin: transfer admin role, old admin loses rights`() {
 }
 
 get fun `test rescue: admin cannot rescue the parent domain`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, parent, owner, _user) = deployLockedCollection();
     val res = coll.sendRescueNft(
         owner.address,
         1,

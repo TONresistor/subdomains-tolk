@@ -1,6 +1,4 @@
 // Message bodies (opcode structs). Opcodes are crc32 (custom) or TEP-62 (reused).
-import "dns-utils"
-import "prices"
 import "storage"
 
 type TransferForwardPayload = RemainingBitsAndRefs
@@ -69,14 +67,66 @@ struct (0xba93) DnsNextResolver {
 
 // ---------------- Factory (Tier 0) ----------------
 struct (0x6c0c4b17) LockCollection {
+    deploymentId: uint64 = 0
     queryId: uint64
+    parentDomain: address
+    admin: address
+    isLinked: bool
+    meta: Cell<CollectionMeta>
+}
+
+// Authenticated collection deployment acknowledgement.
+struct (0x52445931) CollectionReady {
+    deploymentId: uint64
+    queryId: uint64
+    parentDomain: address
+    admin: address
+    currentAdmin: address
+    isLinked: bool
+    isNew: bool
+}
+
+// Confirms that the canonical parent completed a Locked handoff.
+struct (0x48444f4b) ParentHandoffComplete {
+    deploymentId: uint64
+    queryId: uint64
+    parentDomain: address
+    intendedAdmin: address
+}
+
+// Recovery probe bound to a persisted handoff generation.
+struct (0x48445052) ConfirmParentHandoff {
+    deploymentId: uint64
+    queryId: uint64
+    parentDomain: address
+    intendedAdmin: address
+}
+
+// Admin-funded replay of the factory's stored pending phase.
+struct (0x52545259) RetryCollectionDeployment {
+    queryId: uint64
+    collectionAddress: address
+}
+
+// Linked create; the parent owner connects it later through next_resolver.
+struct (0x4c494e4b) CreateLinkedCollection {
+    queryId: uint64
+    parentDomain: address
     admin: address
     meta: Cell<CollectionMeta>
+}
+
+// Generation proof forwarded through the parent during a Locked handoff.
+struct (0x48414e44) FactoryHandoff {
+    deploymentId: uint64 = 0
+    requestQueryId: uint64 = 0
+    intendedAdmin: address
 }
 
 // ---------------- Collection (Tier 1) ----------------
 struct (0x2428aaa6) SubdomainInit {
     queryId: uint64
+    index: uint256
     minter: address
     label: Cell<RemainingBitsAndRefs>
     setWalletToMinter: bool

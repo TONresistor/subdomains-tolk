@@ -8,8 +8,8 @@ import "storage"
 
 contract SubdomainCollection {
     author: "tolk-subdomains"
-    version: "1.0.0"
-    description: "Per-domain subdomain registry: custody+lock of the parent, mint, resolver, transferable admin."
+    version: "1.3.0"
+    description: "Per-domain registry with Locked or Linked parent custody, minting, DNS and transferable admin."
     incomingMessages: AllowedCollectionMessage
     storage: CollectionStorage
     storageAtDeployment: CollectionSkeleton
@@ -26,9 +26,10 @@ type AllowedCollectionMessage =
     | SetLabelReserved
     | RescueNft
     | GetRoyaltyParams
+    | ConfirmParentHandoff
 
 fun emptyReserved(): map<uint256, ()> {
-    var m: map<uint256, ()> = [];
+    val m: map<uint256, ()> = [];
     return m;
 }
 
@@ -37,12 +38,13 @@ fun assertAdmin(senderAddress: address, admin: address) {
 }
 
 fun sendParentHeartbeat(parent: address, amount: coins) {
-    createMessage({
+    val heartbeatMessage = createMessage({
         bounce: true,
         dest: parent,
         value: amount,
         body: beginCell().endCell(),
-    }).send(SEND_MODE_PAY_FEES_SEPARATELY);
+    });
+    heartbeatMessage.send(SEND_MODE_PAY_FEES_SEPARATELY);
 }
 
 fun pinNextResolver(parent: address, queryId: uint64, mode: int) {
@@ -50,7 +52,7 @@ fun pinNextResolver(parent: address, queryId: uint64, mode: int) {
         .storeRef(contract.getAddress().toNextResolver())
         .endCell()
         .beginParse();
-    createMessage({
+    val resolverPinMessage = createMessage({
         bounce: true,
         dest: parent,
         value: ton("0.05"),
@@ -59,19 +61,107 @@ fun pinNextResolver(parent: address, queryId: uint64, mode: int) {
             key: CAT_DNS_NEXT_RESOLVER,
             value: recordValue,
         },
-    }).send(mode);
+    });
+    resolverPinMessage.send(mode);
 }
 
-fun onBouncedMessage(in: InMessageBounced) {}
+fun notifyFactory(
+    master: address,
+    deploymentId: uint64,
+    queryId: uint64,
+    parentDomain: address,
+    creatorAdmin: address,
+    currentAdmin: address,
+    isLinked: bool,
+    isNew: bool,
+) {
+    val ready = createMessage({
+        bounce: BounceMode.NoBounce,
+        dest: master,
+        value: FACTORY_READY_VALUE,
+        body: CollectionReady {
+            deploymentId,
+            queryId,
+            parentDomain,
+            admin: creatorAdmin,
+            currentAdmin,
+            isLinked,
+            isNew,
+        },
+    });
+    ready.send(SEND_MODE_PAY_FEES_SEPARATELY);
+}
+
+fun notifyParentHandoffComplete(
+    master: address,
+    parentDomain: address,
+    receipt: FactoryHandoffReceipt,
+) {
+    val complete = createMessage({
+        bounce: BounceMode.NoBounce,
+        dest: master,
+        value: FACTORY_READY_VALUE,
+        body: ParentHandoffComplete {
+            deploymentId: receipt.deploymentId,
+            queryId: receipt.requestQueryId,
+            parentDomain,
+            intendedAdmin: receipt.intendedAdmin,
+        },
+    });
+    complete.send(SEND_MODE_PAY_FEES_SEPARATELY);
+}
+
+// Rich bounce authenticates a failed item init and releases its label.
+fun onBouncedMessage(in: InMessageBounced) {
+    if (in.bouncedBody.remainingBitsCount() < 32 || in.bouncedBody.preloadUint(32) != 0xfffffffe) {
+        return;
+    }
+
+    val rich = lazy RichBounceBody.fromSlice(in.bouncedBody);
+    val originalBody = rich.originalBody.beginParse();
+    if (originalBody.remainingBitsCount() < 32 || originalBody.preloadUint(32) != 0x2428aaa6) {
+        return;
+    }
+
+    val init = lazy SubdomainInit.fromSlice(originalBody);
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return;
+    }
+    var storage = loader.parseLocked();
+    val itemCode = subdomainItemCompiledCode();
+    assert (
+        in.senderAddress == calcDeployedItem(init.index, itemCode).calculateAddress()
+    ) throw ERROR_NOT_FROM_COLLECTION;
+    assert (init.label.load().hash() == init.index) throw ERROR_INDEX_MISMATCH;
+
+    if (!storage.minted.exists(init.index)) {
+        return;
+    }
+    storage.minted.delete(init.index);
+    // The set is authoritative; saturate its auxiliary count.
+    if (storage.mintedCount > 0) {
+        storage.mintedCount -= 1;
+    }
+    storage.save();
+
+    val labelBits = init.label.load().remainingBitsCount();
+    val price = storage.meta.load().priceConfig.load().priceForCharCount(labelBits / BYTE_SIZE);
+    val refund = createMessage({
+        bounce: BounceMode.NoBounce,
+        dest: init.minter,
+        value: price + in.valueCoins,
+        body: Excesses { queryId: init.queryId },
+    });
+    refund.send(SEND_MODE_PAY_FEES_SEPARATELY);
+}
 
 fun onInternalMessage(in: InMessage) {
     val loader = startLoadingCollection();
 
     // ============================ SKELETON (not locked) ============================
     if (!loader.isLocked()) {
-        // Only a LockCollection from the master locks us. Absorb anything else without throwing:
-        // a parent OwnershipAssigned that wins the cross-sender race against LockCollection would
-        // otherwise abort here (the pin then relies on EnforceResolver post-create).
+        // Ignore messages until the master initializes this skeleton.
         if (
             in.body.isEmpty() || in.body.remainingBitsCount() < 32 ||
             in.body.preloadUint(32) != 0x6c0c4b17
@@ -82,13 +172,25 @@ fun onInternalMessage(in: InMessage) {
         val lock = lazy LockCollection.fromSlice(in.body);
         val sk = loader.parseSkeleton();
         assert (in.senderAddress == sk.master) throw ERROR_NOT_FROM_MASTER;
-        // No admin-workchain throw here: the factory (master) already validated it before dispatching
-        // the .ton. Throwing post-handoff would strand the .ton (the v2 incident class).
+        assert (lock.parentDomain == sk.parentDomain) throw ERROR_NOT_FROM_MASTER;
+        assert (lock.isLinked == sk.isLinked) throw ERROR_NOT_FROM_MASTER;
+        if (sk.isLinked) {
+            // Enforce the creator committed into Linked StateInit.
+            assert (lock.admin == sk.linkedAdmin) throw ERROR_NOT_ADMIN;
+        }
+        // The factory validates workchains before transferring custody.
 
         val locked: CollectionStorage = {
             master: sk.master,
             parentDomain: sk.parentDomain,
             admin: lock.admin,
+            origin: CollectionOrigin {
+                linkedAdmin: sk.linkedAdmin,
+                isLinkedAtDeployment: sk.isLinked,
+                lastFactoryHandoff: null,
+            }.toCell(),
+            // Custody mode comes from StateInit, not the lock message.
+            isLinked: sk.isLinked,
             lastParentFillUp: blockchain.now(),
             meta: lock.meta,
             reserved: emptyReserved(),
@@ -96,6 +198,16 @@ fun onInternalMessage(in: InMessage) {
             mintedCount: 0,
         };
         locked.save();
+        notifyFactory(
+            sk.master,
+            lock.deploymentId,
+            lock.queryId,
+            sk.parentDomain,
+            lock.admin,
+            lock.admin,
+            sk.isLinked,
+            true,
+        );
         return;
     }
 
@@ -107,9 +219,80 @@ fun onInternalMessage(in: InMessage) {
     }
 
     if (in.body.remainingBitsCount() >= 32 && in.body.preloadUint(32) == 0x05138d91) {
+        // Parent landing either completes Locked creation or terminally upgrades Linked.
         if (in.senderAddress == storage.parentDomain) {
             val assigned = lazy OwnershipAssigned.fromSlice(in.body);
-            pinNextResolver(storage.parentDomain, assigned.queryId, SEND_MODE_PAY_FEES_SEPARATELY);
+            var factoryReceipt: FactoryHandoffReceipt? = null;
+            var handoffPayload = assigned.payload;
+            if (handoffPayload.remainingBitsCount() > 0) {
+                val payloadInRef = handoffPayload.loadBool();
+                if (payloadInRef && handoffPayload.remainingRefsCount() > 0) {
+                    handoffPayload = handoffPayload.loadRef().beginParse();
+                }
+            }
+            if (
+                assigned.oldOwnerAddress != null && assigned.oldOwnerAddress! == storage.master &&
+                handoffPayload.remainingBitsCount() >= 32 &&
+                handoffPayload.preloadUint(32) == 0x48414e44
+            ) {
+                val handoff = FactoryHandoff.fromSlice(handoffPayload);
+                assert (handoff.deploymentId == assigned.queryId) throw ERROR_NOT_FROM_MASTER;
+                factoryReceipt = FactoryHandoffReceipt {
+                    deploymentId: handoff.deploymentId,
+                    requestQueryId: handoff.requestQueryId,
+                    intendedAdmin: handoff.intendedAdmin,
+                    returnRequired: handoff.intendedAdmin != storage.admin,
+                };
+                var updatedOrigin = storage.origin.load();
+                updatedOrigin.lastFactoryHandoff = factoryReceipt!.toCell();
+                storage.origin = updatedOrigin.toCell();
+                storage.save();
+            }
+
+            // Return a re-auctioned parent when the active registry has a different admin.
+            if (factoryReceipt != null && factoryReceipt!.returnRequired) {
+                val returnParent = createMessage({
+                    bounce: BounceMode.RichBounce,
+                    dest: storage.parentDomain,
+                    value: 0,
+                    body: TransferOwnership {
+                        queryId: factoryReceipt!.deploymentId,
+                        transferData: {
+                            newOwnerAddress: factoryReceipt!.intendedAdmin,
+                            // The factory keeps pending until this canonical parent acknowledgement.
+                            responseDestination: storage.master,
+                            customPayload: null,
+                            forwardAmount: 0,
+                            forwardPayload: beginCell()
+                                .storeBool(true)
+                                .storeRef(
+                                    FactoryHandoff {
+                                        deploymentId: factoryReceipt!.deploymentId,
+                                        requestQueryId: factoryReceipt!.requestQueryId,
+                                        intendedAdmin: factoryReceipt!.intendedAdmin,
+                                    }.toCell(),
+                                )
+                                .endCell()
+                                .beginParse(),
+                        },
+                    },
+                });
+                returnParent.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                return;
+            }
+            if (storage.isLinked) {
+                storage.isLinked = false;
+                storage.save();
+            }
+            // Commit custody even if the resolver pin must be repaired later.
+            pinNextResolver(
+                storage.parentDomain,
+                assigned.queryId,
+                SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_IGNORE_ERRORS,
+            );
+            if (factoryReceipt != null) {
+                notifyParentHandoffComplete(storage.master, storage.parentDomain, factoryReceipt!);
+            }
         }
         return;
     }
@@ -118,14 +301,39 @@ fun onInternalMessage(in: InMessage) {
         return;
     }
 
+    // Active-address retries report current state and return their attached value.
+    if (in.body.remainingBitsCount() >= 32 && in.body.preloadUint(32) == 0x6c0c4b17) {
+        val duplicate = lazy LockCollection.fromSlice(in.body);
+        assert (in.senderAddress == storage.master) throw ERROR_NOT_FROM_MASTER;
+        val origin = storage.origin.load();
+        assert (duplicate.parentDomain == storage.parentDomain) throw ERROR_NOT_FROM_MASTER;
+        assert (duplicate.isLinked == origin.isLinkedAtDeployment) throw ERROR_NOT_FROM_MASTER;
+        notifyFactory(
+            storage.master,
+            duplicate.deploymentId,
+            duplicate.queryId,
+            duplicate.parentDomain,
+            duplicate.admin,
+            storage.admin,
+            duplicate.isLinked,
+            false,
+        );
+        val duplicateRefund = createMessage({
+            bounce: false,
+            dest: duplicate.admin,
+            value: 0,
+            body: Excesses { queryId: duplicate.queryId },
+        });
+        duplicateRefund.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        return;
+    }
+
     val msg = lazy AllowedCollectionMessage.fromSlice(in.body);
 
     match (msg) {
         // ---------------- MINT ----------------
         RegisterSubdomain => {
-            // Reject masterchain minters up-front: the item init also forces basechain, so without
-            // this guard a masterchain mint would bounce the deploy AFTER the label is marked minted,
-            // bricking the slot permanently and keeping the price. Fail here so it refunds instead.
+            // Reject before reserving a label the basechain item cannot use.
             in.senderAddress.forceBasechain();
 
             val label = msg.label.load();
@@ -139,10 +347,9 @@ fun onInternalMessage(in: InMessage) {
             assert (checkDomainString(label, len)) throw ERROR_LABEL_INVALID_CHARS;
             assert (label.remainingRefsCount() == 0) throw ERROR_LABEL_INVALID_CHARS;
 
-            // Validate the records the item would load, so a malformed cell fails here (refund)
-            // rather than bouncing the item deploy after the slot is marked minted.
+            // Validate records before reserving the label.
             if (msg.initialRecords != null) {
-                msg.initialRecords.load();
+                val _validatedRecords = msg.initialRecords.load();
             }
 
             val index = label.hash();
@@ -154,16 +361,17 @@ fun onInternalMessage(in: InMessage) {
 
             val price = cfg.priceForCharCount(len / BYTE_SIZE);
             assert (
-                in.valueCoins >= price + ITEM_DEPLOY_COST + MINT_FEE_BUFFER + PER_NAME_RENT_RESERVE
+                in.valueCoins >= price + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
             ) throw ERROR_INSUFFICIENT_MINT_VALUE;
 
             val itemCode = subdomainItemCompiledCode();
             val deployMsg = createMessage({
-                bounce: BounceMode.Only256BitsOfBody,
+                bounce: BounceMode.RichBounce,
                 dest: calcDeployedItem(index, itemCode),
                 value: ITEM_DEPLOY_COST,
                 body: SubdomainInit {
                     queryId: msg.queryId,
+                    index,
                     minter: in.senderAddress,
                     label: msg.label,
                     setWalletToMinter: msg.setWalletToMinter,
@@ -175,15 +383,17 @@ fun onInternalMessage(in: InMessage) {
             storage.minted.set(index, ());
             storage.mintedCount += 1;
 
+            // Only a Locked collection owns the parent and can renew it.
             val nowTime = blockchain.now();
-            if (nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL) {
+            if (
+                !storage.isLinked && nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL
+            ) {
                 sendParentHeartbeat(storage.parentDomain, PARENT_HEARTBEAT_AMOUNT);
                 storage.lastParentFillUp = nowTime;
             }
             storage.save();
 
-            val refund = in.valueCoins - price - ITEM_DEPLOY_COST - MINT_FEE_BUFFER -
-            PER_NAME_RENT_RESERVE;
+            val refund = in.valueCoins - price - ITEM_DEPLOY_COST - MINT_FEE_BUFFER;
             if (refund > 0) {
                 val refundMsg = createMessage({
                     body: Excesses { queryId: msg.queryId },
@@ -207,8 +417,7 @@ fun onInternalMessage(in: InMessage) {
         WithdrawFees => {
             assertAdmin(in.senderAddress, storage.admin);
             val balance = contract.getOriginalBalance();
-            val keep = COLLECTION_MIN_BALANCE + LEASE_RESERVE + FWD_FEE_RESERVE +
-            storage.mintedCount * PER_NAME_RENT_RESERVE;
+            val keep = COLLECTION_MIN_BALANCE + FWD_FEE_RESERVE;
             var maxWithdraw = balance - in.valueCoins - keep;
             if (maxWithdraw < 0) {
                 maxWithdraw = 0;
@@ -231,8 +440,7 @@ fun onInternalMessage(in: InMessage) {
         // ---------------- admin: transfer role ----------------
         TransferAdmin => {
             assertAdmin(in.senderAddress, storage.admin);
-            // Reject a masterchain/garbage new admin: an unusable admin would brick every admin op
-            // (withdraw included) and strand revenue with no recovery on a non-upgradeable contract.
+            // An unusable admin would permanently lock privileged operations.
             msg.newAdmin.forceBasechain();
             val prev = storage.admin;
             storage.admin = msg.newAdmin;
@@ -252,6 +460,7 @@ fun onInternalMessage(in: InMessage) {
         // ---------------- admin: proxy-edit parent record ----------------
         ProxyEditParentRecord => {
             assertAdmin(in.senderAddress, storage.admin);
+            assert (!storage.isLinked) throw ERROR_LINKED_NO_CUSTODY; // we don't own the parent
             assert (msg.key != CAT_DNS_NEXT_RESOLVER) throw ERROR_CANNOT_EDIT_RESOLVER;
             val relay = createMessage({
                 bounce: true,
@@ -266,30 +475,30 @@ fun onInternalMessage(in: InMessage) {
             relay.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
 
-        // ---------------- public: fill up parent ----------------
+        // ---------------- public: fill up parent (caller-funded) ----------------
         FillUpParent => {
-            // Throttle the public renew (same window as the mint auto-heartbeat) so a stranger
-            // cannot spam it to shovel collection revenue into the unrecoverable parent every block.
-            val nowTime = blockchain.now();
-            if (nowTime - storage.lastParentFillUp <= PARENT_HEARTBEAT_INTERVAL) {
-                return;
-            }
-            val balance = contract.getOriginalBalance();
-            val available = balance - COLLECTION_MIN_BALANCE - FWD_FEE_RESERVE -
-            storage.mintedCount * PER_NAME_RENT_RESERVE;
-            var amount = PARENT_FILL_AMOUNT;
-            if (amount > available) {
-                amount = available;
-            }
-            assert (amount > 0) throw ERROR_INSUFFICIENT_BALANCE;
-            sendParentHeartbeat(storage.parentDomain, amount);
-            storage.lastParentFillUp = nowTime;
+            // Caller-funded renewal forwards only the incoming remainder.
+            assert (
+                !storage.isLinked
+            ) throw ERROR_LINKED_NO_CUSTODY;                          // the owner renews their own .ton
+            assert (in.valueCoins >= MIN_PARENT_FILL) throw ERROR_INSUFFICIENT_BALANCE;
+            val heartbeat = createMessage({
+                bounce: true,
+                dest: storage.parentDomain,
+                value: 0,
+                body: beginCell().endCell(),
+            });
+            heartbeat.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            storage.lastParentFillUp = blockchain.now();
             storage.save();
         }
 
         // ---------------- public: enforce resolver ----------------
         EnforceResolver => {
             // Caller must fund the pin so spamming this drains the caller, not the collection.
+            assert (
+                !storage.isLinked
+            ) throw ERROR_LINKED_NO_CUSTODY;                          // we can't write the parent's records
             assert (in.valueCoins >= RESOLVER_PIN_FUND) throw ERROR_INSUFFICIENT_BALANCE;
             pinNextResolver(storage.parentDomain, msg.queryId, SEND_MODE_PAY_FEES_SEPARATELY);
         }
@@ -307,7 +516,10 @@ fun onInternalMessage(in: InMessage) {
         // ---------------- admin: rescue NFT ----------------
         RescueNft => {
             assertAdmin(in.senderAddress, storage.admin);
-            assert (msg.nftAddress != storage.parentDomain) throw ERROR_RESCUE_PARENT_FORBIDDEN;
+            // Locked protects parent custody; Linked allows rescue of a mis-routed parent.
+            assert (
+                storage.isLinked || msg.nftAddress != storage.parentDomain
+            ) throw ERROR_RESCUE_PARENT_FORBIDDEN;
             val emptyPayload = beginCell().endCell().beginParse();
             val rescueMsg = createMessage({
                 bounce: true,
@@ -343,11 +555,58 @@ fun onInternalMessage(in: InMessage) {
             reply.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
 
+        ConfirmParentHandoff => {
+            assert (in.senderAddress == storage.master) throw ERROR_NOT_FROM_MASTER;
+            assert (msg.parentDomain == storage.parentDomain) throw ERROR_NOT_FROM_MASTER;
+            val origin = storage.origin.load();
+            if (origin.lastFactoryHandoff == null) {
+                return;
+            }
+            val receipt = origin.lastFactoryHandoff!.load();
+            if (
+                receipt.deploymentId != msg.deploymentId || receipt.requestQueryId != msg.queryId ||
+                receipt.intendedAdmin != msg.intendedAdmin
+            ) {
+                return;
+            }
+
+            if (!receipt.returnRequired) {
+                notifyParentHandoffComplete(storage.master, storage.parentDomain, receipt);
+                return;
+            }
+
+            // Recover an interrupted return after TransferAdmin raced the handoff.
+            val returnParent = createMessage({
+                bounce: BounceMode.RichBounce,
+                dest: storage.parentDomain,
+                value: 0,
+                body: TransferOwnership {
+                    queryId: receipt.deploymentId,
+                    transferData: {
+                        newOwnerAddress: receipt.intendedAdmin,
+                        responseDestination: storage.master,
+                        customPayload: null,
+                        forwardAmount: 0,
+                        forwardPayload: beginCell()
+                            .storeBool(true)
+                            .storeRef(
+                                FactoryHandoff {
+                                    deploymentId: receipt.deploymentId,
+                                    requestQueryId: receipt.requestQueryId,
+                                    intendedAdmin: receipt.intendedAdmin,
+                                }.toCell(),
+                            )
+                            .endCell()
+                            .beginParse(),
+                    },
+                },
+            });
+            returnParent.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        }
+
         else => throw ERROR_UNKNOWN_OP,
     }
 }
-
-// =========================== getters ===========================
 
 get fun get_collection_data(): CollectionDataReply {
     val loader = startLoadingCollection();
@@ -360,13 +619,14 @@ get fun get_collection_data(): CollectionDataReply {
     }
     val st = loader.parseLocked();
     return {
-        nextItemIndex: st.mintedCount, // real minted supply; items are hash-addressed (no sequential index)
+        // TEP-62 reserves -1 for non-sequential collections.
+        nextItemIndex: -1,
         content: st.meta.load().collectionContent,
         ownerAddress: st.admin,
     };
 }
 
-// TEP-66 royalty getter. 0% (subdomains are utility, not art) but conformant so marketplaces render.
+// TEP-66, with zero royalty.
 get fun royalty_params(): (int, int, address) {
     val loader = startLoadingCollection();
     if (!loader.isLocked()) {
@@ -395,7 +655,7 @@ get fun get_minted_count(): int {
     return loader.parseLocked().mintedCount;
 }
 
-get fun get_nft_content(index: int, individualContent: cell): cell {
+get fun get_nft_content(_index: int, individualContent: cell): cell {
     val loader = startLoadingCollection();
     if (!loader.isLocked()) {
         return beginCell().endCell();
@@ -437,14 +697,30 @@ get fun get_parent_domain(): address {
     return loader.parseLocked().parentDomain;
 }
 
+// Immutable creator witness; Locked collections return the master sentinel.
+get fun get_linked_admin(): address {
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return loader.parseSkeleton().linkedAdmin;
+    }
+    return loader.parseLocked().origin.load().linkedAdmin;
+}
+
 get fun is_locked(): bool {
     return startLoadingCollection().isLocked();
 }
 
-get fun dnsresolve(subdomain: slice, _category: int): DnsResolveResponse {
-    assert (subdomain.remainingBitsCount() % BYTE_SIZE == 0) throw ERROR_DNS_INVALID_SUBDOMAIN_BITS;
+// Current custody mode; is_locked() only reports initialization.
+get fun get_is_linked(): bool {
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return false;
+    }
+    return loader.parseLocked().isLinked;
+}
 
-    val startsWithZeroByte = subdomain.preloadInt(BYTE_SIZE) == 0;
+get fun dnsresolve(subdomain: slice, _category: int): DnsResolveResponse {
+    val startsWithZeroByte = dnsQueryStartsWithZero(subdomain);
 
     if (startsWithZeroByte && subdomain.remainingBitsCount() == BYTE_SIZE) {
         return { resolvedPrefixLengthBits: BYTE_SIZE, resolvedRecord: null };

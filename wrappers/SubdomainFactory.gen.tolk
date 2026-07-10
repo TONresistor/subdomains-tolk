@@ -8,6 +8,7 @@ import "@acton/emulation/network"
 import "@acton/testing/assert"
 import "@contracts/SubdomainFactory"
 import "@contracts/messages"
+import "@contracts/storage"
 
 /// Storage `FactoryStorage` is defined in `@contracts/SubdomainFactory`
 struct SubdomainFactory {
@@ -19,12 +20,13 @@ struct SubdomainFactory {
 fun SubdomainFactory.fromStorage(
     storage: FactoryStorage,
     toShard: AddressShardingOptions? = null,
+    workchain: int8 = BASECHAIN,
 ): SubdomainFactory {
     val stateInit = ContractState {
         code: build("SubdomainFactory"),
         data: storage.toCell(),
     };
-    val address = AutoDeployAddress { stateInit, toShard }.calculateAddress();
+    val address = AutoDeployAddress { workchain, stateInit, toShard }.calculateAddress();
     return SubdomainFactory { address, stateInit };
 }
 
@@ -63,6 +65,92 @@ fun SubdomainFactory.sendOwnershipAssigned(
     return net.send(from, genericMsg);
 }
 
+fun SubdomainFactory.sendCreateLinkedCollection(
+    self,
+    from: address,
+    queryId: uint64,
+    parentDomain: address,
+    admin: address,
+    meta: CollectionMeta,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: CreateLinkedCollection {
+            queryId,
+            parentDomain,
+            admin,
+            meta: meta.toCell(),
+        },
+    });
+    return net.send(from, genericMsg);
+}
+
+fun SubdomainFactory.sendCollectionReady(
+    self,
+    from: address,
+    deploymentId: uint64,
+    queryId: uint64,
+    parentDomain: address,
+    admin: address,
+    currentAdmin: address,
+    isLinked: bool,
+    isNew: bool,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: CollectionReady {
+            deploymentId,
+            queryId,
+            parentDomain,
+            admin,
+            currentAdmin,
+            isLinked,
+            isNew,
+        },
+    });
+    return net.send(from, genericMsg);
+}
+
+fun SubdomainFactory.sendParentHandoffComplete(
+    self,
+    from: address,
+    deploymentId: uint64,
+    queryId: uint64,
+    parentDomain: address,
+    intendedAdmin: address,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: ParentHandoffComplete { deploymentId, queryId, parentDomain, intendedAdmin },
+    });
+    return net.send(from, genericMsg);
+}
+
+fun SubdomainFactory.sendRetryCollectionDeployment(
+    self,
+    from: address,
+    queryId: uint64,
+    collectionAddress: address,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: RetryCollectionDeployment { queryId, collectionAddress },
+    });
+    return net.send(from, genericMsg);
+}
+
 /// Send message to the contract with a custom body cell
 fun SubdomainFactory.sendAny(
     self,
@@ -81,6 +169,14 @@ fun SubdomainFactory.sendAny(
 
 fun SubdomainFactory.getCollectionAddress(self, parentDomain: address): address {
     return net.runGetMethod(self.address, "get_collection_address", [parentDomain]);
+}
+
+fun SubdomainFactory.getLinkedCollectionAddress(
+    self,
+    parentDomain: address,
+    admin: address,
+): address {
+    return net.runGetMethod(self.address, "get_linked_collection_address", [parentDomain, admin]);
 }
 
 fun SubdomainFactory.getDeployedCount(self): int {

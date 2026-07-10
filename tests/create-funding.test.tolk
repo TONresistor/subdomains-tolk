@@ -3,14 +3,13 @@
 // every nanoton of the flow must come from the create message itself, explicitly budgeted.
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
 import "@acton/types/transaction"
+import "@contracts/messages"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainFactory.gen"
 import "test-utils"
-import "../contracts/messages"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
-import "../wrappers/SubdomainFactory.gen"
 
 fun createPayload(): RemainingBitsAndRefs {
     return beginCell().storeRef(makeMeta().toCell()).endCell().beginParse();
@@ -22,7 +21,7 @@ fun createPayload(): RemainingBitsAndRefs {
 get fun `test funding: mainnet repro - thin factory + 0.4 inbound never strands the NFT`() {
     val owner = newActor("ofo");
     val parent = newActor("ofp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(
         owner.address,
         { value: ton("0.1"), bounce: false },
@@ -47,7 +46,7 @@ get fun `test funding: mainnet repro - thin factory + 0.4 inbound never strands 
 get fun `test funding: create succeeds at exact minimum with a dust factory balance`() {
     val owner = newActor("ofo2");
     val parent = newActor("ofp2");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(owner.address, { value: ton("0.01"), bounce: false }); // dust own balance
 
     val expectedColl = factory.getCollectionAddress(parent.address);
@@ -81,7 +80,7 @@ get fun `test funding: create succeeds at exact minimum with a dust factory bala
 get fun `test funding: garbage meta payload refunds the .ton instead of stranding it`() {
     val owner = newActor("ofo3");
     val parent = newActor("ofp3");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
 
     // a ref that is NOT a CollectionMeta (no 3 sub-refs)

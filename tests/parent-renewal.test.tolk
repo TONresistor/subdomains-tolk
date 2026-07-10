@@ -1,33 +1,30 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
-import "@acton/types/transaction"
+import "@contracts/errors"
+import "@wrappers/SubdomainCollection.gen"
 import "test-utils"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
 
-get fun `test renew: explicit fill_up_parent renews the parent lease (throttled)`() {
+get fun `test renew: explicit fill_up_parent renews the parent lease (caller-funded)`() {
     testing.setNow(1700000000);
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, parent, owner, _user) = deployLockedCollection();
     expect(coll.getLastParentFillUp()).toEqual(1700000000); // set at lock time
 
-    // within the throttle window an immediate fill-up is a no-op (anti public-drain)
-    val early = coll.sendFillUpParent(owner.address, 1, { value: ton("1"), bounce: true });
-    expect(early.findTransaction({ from: coll.address, to: parent.address })).toEqual(null);
-    expect(coll.getLastParentFillUp()).toEqual(1700000000);
+    // a below-minimum fill reverts: the renew must be funded by the caller
+    val tooLow = coll.sendFillUpParent(owner.address, 1, { value: ton("0.01"), bounce: true });
+    expect(tooLow).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
 
-    // past the window it renews: a heartbeat (empty-body op 0) is sent and the timer advances
-    testing.setNow(1700000000 + 86400 + 10);
-    val res = coll.sendFillUpParent(owner.address, 1, { value: ton("1"), bounce: true });
+    // a funded fill renews anytime (no throttle): an empty-body op-0 heartbeat reaches the parent
+    testing.setNow(1700000000 + 100);
+    val res = coll.sendFillUpParent(owner.address, 2, { value: ton("1"), bounce: true });
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(res.findTransaction({ from: coll.address, to: parent.address })).toBeNotNull();
-    expect(coll.getLastParentFillUp()).toEqual(1700000000 + 86400 + 10);
+    expect(coll.getLastParentFillUp()).toEqual(1700000000 + 100);
 }
 
 get fun `test renew: minting renews the parent (throttled to once per day)`() {
     testing.setNow(1700000000);
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, parent, _owner, user) = deployLockedCollection();
 
     // first mint at lock time: within the throttle window -> no extra heartbeat yet
     val (_item, res1) = mintSubdomain(coll, user, "alice");
@@ -43,7 +40,7 @@ get fun `test renew: minting renews the parent (throttled to once per day)`() {
 
 get fun `test renew: anyone (e.g. a subdomain holder) can renew the parent`() {
     testing.setNow(1700000000);
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, _user) = deployLockedCollection();
     val holder = newActor("holder");
 
     testing.setNow(1700000000 + 86400 + 10);

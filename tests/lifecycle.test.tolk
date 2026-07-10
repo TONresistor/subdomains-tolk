@@ -1,17 +1,16 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
+import "@contracts/dns-utils"
+import "@contracts/errors"
+import "@contracts/messages"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainItem.gen"
 import "test-utils"
-import "../contracts/dns-utils"
-import "../contracts/errors"
-import "../contracts/messages"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
-import "../wrappers/SubdomainItem.gen"
 
 get fun `test lock: collection deploys locked; the parent .ton landing re-pins (no error)`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, parent, owner, _user) = deployLockedCollection();
 
     // locked, admin = original owner, parent recorded
     expect(coll.getAdmin()).toEqual(owner.address);
@@ -38,7 +37,12 @@ get fun `test lock: only the master (factory) can lock the collection`() {
     val parent = newActor("p2");
     val attacker = newActor("attacker");
 
-    val coll = SubdomainCollection.fromStorage({ master: masterT.address, parentDomain: parent.address });
+    val coll = SubdomainCollection.fromStorage({
+        master: masterT.address,
+        parentDomain: parent.address,
+        isLinked: false,
+        linkedAdmin: masterT.address,
+    });
     coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
 
     // a non-master cannot lock it
@@ -46,7 +50,9 @@ get fun `test lock: only the master (factory) can lock the collection`() {
         attacker.address,
         LockCollection {
             queryId: 1,
+            parentDomain: parent.address,
             admin: attacker.address,
+            isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
         { value: ton("1"), bounce: true },
@@ -56,10 +62,10 @@ get fun `test lock: only the master (factory) can lock the collection`() {
 }
 
 get fun `test mint: deterministic item, owner = minter, wallet record set`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
 
     val expectedAddr = coll.getNftAddressByIndex(labelIndex("alice"));
-    val (item, res) = mintSubdomain(coll, user, "alice");
+    val (item, _res) = mintSubdomain(coll, user, "alice");
 
     expect(item.address).toEqual(expectedAddr);
     expect(testing.isDeployed(item.address)).toEqual(true);
@@ -73,7 +79,7 @@ get fun `test mint: deterministic item, owner = minter, wallet record set`() {
 }
 
 get fun `test resolve: collection routes label to its item address`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice");
 
     val resolved = coll.dnsresolve(makeLabelDomainSlice("alice"), 0);
@@ -88,18 +94,21 @@ get fun `test resolve: collection routes label to its item address`() {
 }
 
 get fun `test resolve: item returns its own wallet record`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice");
 
     // TEP-81 regression: query with the LITERAL sha256("wallet") (what wallets/tonapi use), not the
     // CAT_WALLET constant — proves the default wallet record is keyed standard, not `.toBase256()`.
-    val walletResolved = item.dnsresolve(makeDotSlice(), 0xe8d44050873dba865aa7c170ab4cce64d90839a34dcfd6cf71d14e0205443b1b);
+    val walletResolved = item.dnsresolve(
+        makeDotSlice(),
+        0xe8d44050873dba865aa7c170ab4cce64d90839a34dcfd6cf71d14e0205443b1b,
+    );
     expect(walletResolved.resolvedPrefixLengthBits).toEqual(BYTE_SIZE);
     expect(walletResolved.resolvedRecord).toBeNotNull();
 }
 
 get fun `test transfer: subdomain NFT changes owner (TEP-62)`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice");
     val buyer = newActor("buyer");
 
@@ -123,7 +132,7 @@ get fun `test transfer: subdomain NFT changes owner (TEP-62)`() {
 }
 
 get fun `test records: owner edits its own dns record`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice");
 
     // set a site record (non-owner rejected, owner ok)

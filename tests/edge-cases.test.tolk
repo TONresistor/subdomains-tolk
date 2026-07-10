@@ -1,21 +1,19 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
-import "@acton/types/transaction"
+import "@contracts/dns-utils"
+import "@contracts/errors"
+import "@contracts/messages"
+import "@contracts/prices"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainItem.gen"
 import "test-utils"
-import "../contracts/dns-utils"
-import "../contracts/errors"
-import "../contracts/messages"
-import "../contracts/prices"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
-import "../wrappers/SubdomainItem.gen"
 
 // ----------------------------------------------------------------- pricing
 
 get fun `test price: tiers vary by label length`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, _user) = deployLockedCollection();
     expect(coll.getPrice(4)).toEqual(ton("10"));
     expect(coll.getPrice(6)).toEqual(ton("4"));
     expect(coll.getPrice(9)).toEqual(ton("1"));
@@ -26,7 +24,7 @@ get fun `test price: tiers vary by label length`() {
 // Prices are immutable (fixed at lock); there is deliberately no set_price_config. set_content
 // edits only the metadata URIs and must preserve the price grid.
 get fun `test admin: set_content edits metadata but prices stay fixed`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, owner, _user) = deployLockedCollection();
     val base = beginCell().storeUint(1, 8).storeSlice("https://gw/".beginParse()).endCell();
     // try to sneak in a different price grid via set_content; it must be ignored
     val tamper: PriceConfig = {
@@ -61,7 +59,7 @@ get fun `test admin: set_content edits metadata but prices stay fixed`() {
 // ----------------------------------------------------------------- admin ops
 
 get fun `test admin: withdraw_fees pays the admin, non-admin rejected`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, owner, user) = deployLockedCollection();
     mintSubdomain(coll, user, "alice"); // collection now holds the price as revenue
 
     val bad = coll.sendWithdrawFees(user.address, 1, 0, { value: ton("1"), bounce: true });
@@ -114,7 +112,7 @@ get fun `test admin: proxy edit parent record (resolver forbidden, non-admin rej
 }
 
 get fun `test rescue: a mis-routed (non-parent) NFT can be rescued by the admin`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, owner, _user) = deployLockedCollection();
     val strayNft = newActor("strayNft");
     val res = coll.sendRescueNft(
         owner.address,
@@ -132,7 +130,7 @@ get fun `test rescue: a mis-routed (non-parent) NFT can be rescued by the admin`
 // ----------------------------------------------------------------- item records
 
 get fun `test item: edit_content and change/delete dns record`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice");
 
     // EditContent: replace the whole records map
@@ -156,7 +154,7 @@ get fun `test item: edit_content and change/delete dns record`() {
 }
 
 get fun `test item: dnsresolve category 0, delegation and missing record`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(
         coll,
         user,
@@ -174,7 +172,7 @@ get fun `test item: dnsresolve category 0, delegation and missing record`() {
 }
 
 get fun `test transfer: rejects a masterchain new owner (wrong workchain)`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice");
 
     val mcOwner = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("x"));
@@ -190,7 +188,7 @@ get fun `test transfer: rejects a masterchain new owner (wrong workchain)`() {
 // ----------------------------------------------------------------- real-DnsItem compatibility
 
 get fun `test lock: landing pin is a ChangeDnsRecord the real .ton DnsItem accepts`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, parent, owner, _user) = deployLockedCollection();
     // LockCollection itself must NOT pin (it would race the in-flight NFT hand-off): the pin
     // fires when the parent lands (OwnershipAssigned), as a ChangeDnsRecord (0x4eb1f0f9).
     val landed = coll.sendAny(
@@ -208,7 +206,7 @@ get fun `test lock: landing pin is a ChangeDnsRecord the real .ton DnsItem accep
 }
 
 get fun `test topup: Excesses is accepted silently by collection and item (no aborted tx)`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, parent, _owner, user) = deployLockedCollection();
     // collection: the DnsItem routes its transfer change here as Excesses; must not throw
     val toColl = coll.sendAny(
         parent.address,

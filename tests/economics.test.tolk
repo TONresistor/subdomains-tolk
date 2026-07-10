@@ -1,20 +1,19 @@
 // Economics: right-sized item deposit + buyer refund of overpayment (see economics audit).
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
+import "@contracts/errors"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainItem.gen"
 import "test-utils"
-import "../contracts/errors"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
-import "../wrappers/SubdomainItem.gen"
 
-// "alice" = 5 chars -> default price 5 TON. Required = price + deploy + buffer + per-name rent.
+// "alice" = 5 chars -> default price 5 TON. Required = price + deploy + buffer.
 const ALICE_PRICE = ton("5")
-const REQUIRED = ALICE_PRICE + ITEM_DEPLOY_COST + MINT_FEE_BUFFER + PER_NAME_RENT_RESERVE
+const REQUIRED = ALICE_PRICE + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
 
 get fun `test economics: a freshly-minted item holds the small deposit, not 1 TON`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _res) = mintSubdomain(coll, user, "alice"); // helper overpays (20 TON)
 
     // The item keeps ITEM_DEPLOY_COST (~0.07), NOT the old 1.1/1 TON of dead capital.
@@ -24,7 +23,7 @@ get fun `test economics: a freshly-minted item holds the small deposit, not 1 TO
 }
 
 get fun `test economics: overpayment is refunded to the buyer (only the price is kept)`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
 
     // Send 20 TON for a 5 TON name; the ~14.9 excess must come back to the buyer.
     val before = testing.getAccountBalance(user.address);
@@ -41,7 +40,7 @@ get fun `test economics: overpayment is refunded to the buyer (only the price is
 }
 
 get fun `test economics: exact funding mints with no refund`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
 
     // Send exactly price + deploy + buffer; refund is 0 so no buyer-bound message.
     val (item, res) = mintSubdomain(coll, user, "alice", REQUIRED);
@@ -50,7 +49,7 @@ get fun `test economics: exact funding mints with no refund`() {
 }
 
 get fun `test economics: under the price+deploy+buffer floor is rejected`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
 
     val res = coll.sendRegisterSubdomain(
         user.address,
@@ -64,7 +63,7 @@ get fun `test economics: under the price+deploy+buffer floor is rejected`() {
 }
 
 get fun `test economics: admin withdraws real revenue (no longer stranded by a 1 TON floor)`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, owner, user) = deployLockedCollection();
     mintSubdomain(coll, user, "alice", ton("20")); // 5 TON price now sits on the collection
 
     // Old keep was 1.07 TON, so withdraw returned ~0 for cheap sales. Now the admin collects the revenue.

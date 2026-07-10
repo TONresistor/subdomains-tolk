@@ -5,7 +5,7 @@ import "@acton/env"
 import "@acton/io"
 import "@acton/emulation/network"
 import "@acton/emulation/scripts"
-import "../wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainCollection.gen"
 
 fun main() {
     val keeper = scripts.wallet("prod-deployer");

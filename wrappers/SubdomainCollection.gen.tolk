@@ -19,12 +19,13 @@ struct SubdomainCollection {
 fun SubdomainCollection.fromStorage(
     storage: CollectionSkeleton,
     toShard: AddressShardingOptions? = null,
+    workchain: int8 = BASECHAIN,
 ): SubdomainCollection {
     val stateInit = ContractState {
         code: build("SubdomainCollection"),
         data: storage.toCell(),
     };
-    val address = AutoDeployAddress { stateInit, toShard }.calculateAddress();
+    val address = AutoDeployAddress { workchain, stateInit, toShard }.calculateAddress();
     return SubdomainCollection { address, stateInit };
 }
 
@@ -216,6 +217,24 @@ fun SubdomainCollection.sendGetRoyaltyParams(
     return net.send(from, genericMsg);
 }
 
+fun SubdomainCollection.sendConfirmParentHandoff(
+    self,
+    from: address,
+    deploymentId: uint64,
+    queryId: uint64,
+    parentDomain: address,
+    intendedAdmin: address,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: ConfirmParentHandoff { deploymentId, queryId, parentDomain, intendedAdmin },
+    });
+    return net.send(from, genericMsg);
+}
+
 /// Send message to the contract with a custom body cell
 fun SubdomainCollection.sendAny(
     self,
@@ -272,8 +291,16 @@ fun SubdomainCollection.getParentDomain(self): address {
     return net.runGetMethod(self.address, "get_parent_domain");
 }
 
+fun SubdomainCollection.getLinkedAdmin(self): address {
+    return net.runGetMethod(self.address, "get_linked_admin");
+}
+
 fun SubdomainCollection.isLocked(self): bool {
     return net.runGetMethod(self.address, "is_locked");
+}
+
+fun SubdomainCollection.getIsLinked(self): bool {
+    return net.runGetMethod(self.address, "get_is_linked");
 }
 
 fun SubdomainCollection.dnsresolve(self, subdomain: slice, category: int): DnsResolveResponse {

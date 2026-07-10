@@ -2,18 +2,16 @@
 // boundaries, GetStaticData, record persistence, and unlocked getters.
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
-import "@acton/testing/assert"
 import "@acton/testing/expect"
-import "@acton/types/transaction"
+import "@contracts/dns-utils"
+import "@contracts/errors"
+import "@contracts/messages"
+import "@contracts/prices"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainFactory.gen"
+import "@wrappers/SubdomainItem.gen"
 import "test-utils"
-import "../contracts/dns-utils"
-import "../contracts/errors"
-import "../contracts/messages"
-import "../contracts/prices"
-import "../contracts/storage"
-import "../wrappers/SubdomainCollection.gen"
-import "../wrappers/SubdomainFactory.gen"
-import "../wrappers/SubdomainItem.gen"
 
 fun gridPayload(grid: PriceConfig): RemainingBitsAndRefs {
     val meta: CollectionMeta = {
@@ -27,7 +25,7 @@ fun gridPayload(grid: PriceConfig): RemainingBitsAndRefs {
 fun sendCreate(grid: PriceConfig): SendResultList {
     val owner = newActor("cgo");
     val parent = newActor("cgp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
     return factory.sendOwnershipAssigned(
         parent.address,
@@ -40,7 +38,7 @@ fun sendCreate(grid: PriceConfig): SendResultList {
 
 // every price tier is reachable and returns the configured value
 get fun `test cover: price tiers map every label length`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, _user) = deployLockedCollection();
     expect(coll.getPrice(1)).toEqual(ton("100"));
     expect(coll.getPrice(2)).toEqual(ton("50"));
     expect(coll.getPrice(3)).toEqual(ton("20"));
@@ -121,7 +119,12 @@ get fun `test cover: registry can set a 2-char minimum`() {
     val parent = newActor("p2", ton("100"));
     val owner = newActor("o2", ton("100"));
     val user = newActor("u2", ton("10000"));
-    val coll = SubdomainCollection.fromStorage({ master: masterT.address, parentDomain: parent.address });
+    val coll = SubdomainCollection.fromStorage({
+        master: masterT.address,
+        parentDomain: parent.address,
+        isLinked: false,
+        linkedAdmin: masterT.address,
+    });
     coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
 
     val grid: PriceConfig = {
@@ -147,7 +150,9 @@ get fun `test cover: registry can set a 2-char minimum`() {
         masterT.address,
         LockCollection {
             queryId: 1,
+            parentDomain: parent.address,
             admin: owner.address,
+            isLinked: false,
             meta: meta.toCell(),
         }.toCell(),
         { value: ton("1"), bounce: false },
@@ -195,7 +200,12 @@ get fun `test cover: short names price at their own tier`() {
     val parent = newActor("p1c", ton("100"));
     val owner = newActor("o1", ton("100"));
     val user = newActor("u1", ton("10000"));
-    val coll = SubdomainCollection.fromStorage({ master: masterT.address, parentDomain: parent.address });
+    val coll = SubdomainCollection.fromStorage({
+        master: masterT.address,
+        parentDomain: parent.address,
+        isLinked: false,
+        linkedAdmin: masterT.address,
+    });
     coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
 
     val grid: PriceConfig = {
@@ -221,7 +231,9 @@ get fun `test cover: short names price at their own tier`() {
         masterT.address,
         LockCollection {
             queryId: 1,
+            parentDomain: parent.address,
             admin: owner.address,
+            isLinked: false,
             meta: meta.toCell(),
         }.toCell(),
         { value: ton("1"), bounce: false },
@@ -247,8 +259,10 @@ get fun `test cover: short names price at their own tier`() {
 
 // a label whose bit length is not a whole number of bytes is rejected
 get fun `test cover: non-byte-aligned label is rejected`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
-    val ragged = beginCell().storeUint(0, 33).endCell().beginParse(); // 33 bits, > min, not %8
+    val (coll, _parent, _owner, user) = deployLockedCollection();
+    // Four otherwise-valid label bytes plus one trailing bit: without the explicit byte-alignment
+    // assertion, checkDomainString would inspect only "abcd" and incorrectly accept this.
+    val ragged = beginCell().storeSlice("abcd".beginParse()).storeUint(0, 1).endCell().beginParse();
     val res = coll.sendRegisterSubdomain(
         user.address,
         1,
@@ -262,7 +276,7 @@ get fun `test cover: non-byte-aligned label is rejected`() {
 
 // hyphen rules: rejected at the edge, allowed in the interior
 get fun `test cover: hyphen allowed interior, rejected at the edge`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
 
     val lead = coll.sendRegisterSubdomain(
         user.address,
@@ -280,7 +294,7 @@ get fun `test cover: hyphen allowed interior, rejected at the edge`() {
 
 // GetStaticData (TEP-62) replies with ReportStaticData
 get fun `test cover: item answers GetStaticData with ReportStaticData`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _r) = mintSubdomain(coll, user, "alice");
 
     val res = item.sendGetStaticData(user.address, 9, { value: ton("0.1"), bounce: true });
@@ -292,7 +306,7 @@ get fun `test cover: item answers GetStaticData with ReportStaticData`() {
 
 // a record edit persists across messages (proves the item's setData is load-bearing)
 get fun `test cover: an item record edit persists`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _r) = mintSubdomain(coll, user, "alice");
 
     val siteRec = beginCell().storeUint(0xad01, 16).endCell();
@@ -313,7 +327,12 @@ get fun `test cover: an item record edit persists`() {
 get fun `test cover: getters are safe on a skeleton collection`() {
     val masterT = newActor("skm", ton("10"));
     val parent = newActor("skp", ton("10"));
-    val coll = SubdomainCollection.fromStorage({ master: masterT.address, parentDomain: parent.address });
+    val coll = SubdomainCollection.fromStorage({
+        master: masterT.address,
+        parentDomain: parent.address,
+        isLinked: false,
+        linkedAdmin: masterT.address,
+    });
     coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
     expect(coll.isLocked()).toEqual(false);
 
@@ -326,7 +345,7 @@ get fun `test cover: getters are safe on a skeleton collection`() {
 
 // dnsresolve routing math: apex resolves to self-without-record; a real label routes to its item
 get fun `test cover: dnsresolve routing prefix lengths`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, _parent, _owner, _user) = deployLockedCollection();
 
     // bare "." (single \0) = self, no record
     val apex = coll.dnsresolve(makeDotSlice(), 0);
@@ -344,24 +363,26 @@ get fun `test cover: dnsresolve routing prefix lengths`() {
 
 // a locked collection refuses a second LockCollection (re-onboard safety: bounce:true returns the value)
 get fun `test cover: a locked collection rejects a re-lock`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+    val (coll, parent, owner, _user) = deployLockedCollection();
     val res = coll.sendAny(
         owner.address,
         LockCollection {
             queryId: 1,
+            parentDomain: parent.address,
             admin: owner.address,
+            isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
         { value: ton("1"), bounce: true },
     );
-    expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_UNKNOWN_OP });
+    expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_NOT_FROM_MASTER });
     expect(coll.getAdmin()).toEqual(owner.address); // admin unchanged
 }
 
 // the factory safely ignores a bare value top-up (empty body)
 get fun `test cover: factory ignores an empty-body top-up`() {
     val someone = newActor("ftu");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(someone.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendAny(
@@ -377,7 +398,7 @@ get fun `test cover: factory ignores an empty-body top-up`() {
 // the factory silently accepts an Excesses top-up (NFT change), no deploy
 get fun `test cover: factory ignores an Excesses top-up`() {
     val someone = newActor("fex");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(someone.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendAny(
@@ -393,7 +414,7 @@ get fun `test cover: factory ignores an Excesses top-up`() {
 get fun `test cover: factory refunds a transfer that carries no config`() {
     val owner = newActor("ncfo");
     val parent = newActor("ncfp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0 });
+    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     // sufficient value, but the forward payload has no meta ref -> must refund (not deploy)
@@ -411,15 +432,17 @@ get fun `test cover: factory refunds a transfer that carries no config`() {
     expect(factory.getDeployedCount()).toEqual(0);
 }
 
-// withdraw-all keeps exactly the reserve band (lease can always be renewed, not drained to 0)
-get fun `test cover: withdraw-all retains the lease reserve`() {
-    val (coll, parent, owner, user) = deployLockedCollection();
+// withdraw-all keeps only the small operating floor (no lease reserve); revenue is fully released
+get fun `test cover: withdraw-all retains only the operating floor`() {
+    val (coll, _parent, owner, user) = deployLockedCollection();
     mintSubdomain(coll, user, "alice", ton("20")); // 5 TON revenue retained
 
     val res = coll.sendWithdrawFees(owner.address, 1, 0, { value: ton("0.05"), bounce: true });
     expect(res).toHaveSuccessfulTx({ from: coll.address, to: owner.address });
 
     val kept = testing.getAccountBalance(coll.address);
-    expect(kept > LEASE_RESERVE).toEqual(true); // floor includes LEASE_RESERVE (0.3)
-    expect(kept < ton("0.6")).toEqual(true);    // but the ~5 TON revenue did leave
+    expect(
+        kept >= COLLECTION_MIN_BALANCE,
+    ).toEqual(true);                          // floor kept: collection stays operational
+    expect(kept < ton("0.25")).toEqual(true); // the ~5 TON revenue left
 }

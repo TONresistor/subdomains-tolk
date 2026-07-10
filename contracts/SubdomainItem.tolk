@@ -6,7 +6,7 @@ import "storage"
 
 contract SubdomainItem {
     author: "tolk-subdomains"
-    version: "1.0.0"
+    version: "1.3.0"
     description: "Subdomain NFT item (TEP-62) holding its own DNS records."
     incomingMessages: AllowedItemMessage
     storage: ItemStorageInitialized
@@ -73,7 +73,9 @@ fun applyOwnershipTransfer(
     storage.save();
 }
 
-fun onBouncedMessage(in: InMessageBounced) {}
+// Every outbound item message is deliberately non-bounceable: ownership notifications and
+// excesses are best-effort standard replies, so there is no item state to roll back on failure.
+fun onBouncedMessage(_in: InMessageBounced) {}
 
 fun onInternalMessage(in: InMessage) {
     val loading = startLoadingItemStorage();
@@ -89,6 +91,7 @@ fun onInternalMessage(in: InMessage) {
         );
         init.minter.forceBasechain();
 
+        assert (init.index == uninit.index) throw ERROR_INDEX_MISMATCH;
         assert (init.label.load().hash() == uninit.index) throw ERROR_INDEX_MISMATCH;
 
         var records: DnsRecords = init.initialRecords != null ? init.initialRecords.load() : [];
@@ -231,7 +234,7 @@ get fun get_valid_until(): int {
 
 get fun dnsresolve(subdomain: slice, category: uint256): DnsResolveResponse {
     val subdomainBits = subdomain.remainingBitsCount();
-    assert (subdomainBits % BYTE_SIZE == 0) throw ERROR_DNS_INVALID_SUBDOMAIN_BITS;
+    assertDnsQueryStartsWithZero(subdomain);
 
     val loading = startLoadingItemStorage();
     if (!loading.isInitialized()) {
@@ -239,9 +242,6 @@ get fun dnsresolve(subdomain: slice, category: uint256): DnsResolveResponse {
     }
     val st = loading.parseInitialized();
     val dnsRecord = st.records.load();
-
-    val startsWithZeroByte = subdomain.preloadInt(BYTE_SIZE) == 0;
-    assert (startsWithZeroByte) throw ERROR_DNS_INVALID_SUBDOMAIN_BITS;
 
     if (subdomainBits > BYTE_SIZE) {
         category = CAT_DNS_NEXT_RESOLVER;
