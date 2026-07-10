@@ -1,0 +1,52 @@
+name: Acton
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acton-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Setup Acton
+        id: setup-acton
+        uses: ton-blockchain/setup-acton@2d38fd579e1bf8753a3e0cff9ad695612b98a676
+        with:
+          version: "1.1.0"
+          save-cache: true
+
+      - name: Cache project
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            .acton
+            build/cache
+          key: acton-${{ runner.os }}-${{ steps.setup-acton.outputs.acton-version }}-${{ hashFiles('Acton.toml', '**/*.tolk') }}
+          restore-keys: |
+            acton-${{ runner.os }}-${{ steps.setup-acton.outputs.acton-version }}-
+
+      - name: Build
+        run: acton build
+
+      - name: Test
+        run: acton test tests
+
+      - name: Check
+        run: acton check
+
+      - name: Format
+        run: acton fmt --check

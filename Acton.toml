@@ -5,7 +5,7 @@ version = "2.0.0"
 license = "MIT"
 
 [toolchain]
-acton = "1.1.0-trunk"
+acton = "1.1.0"
 
 # Tier 2: one NFT per subdomain
 [contracts.SubdomainItem]
