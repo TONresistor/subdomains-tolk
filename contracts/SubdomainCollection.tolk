@@ -1,10 +1,11 @@
-// Tier 1: one registry per parent domain. Custody/lock + mint + resolver + admin.
-import "@gen/SubdomainItem.code"
 import "dns-utils"
 import "errors"
 import "messages"
 import "prices"
 import "storage"
+// Tier 1: one registry per parent domain. Custody/lock + mint + resolver + admin.
+// check-disable-next-line import-path-can-use-mappings
+import "../gen/SubdomainItem.code"
 
 contract SubdomainCollection {
     author: "tolk-subdomains"

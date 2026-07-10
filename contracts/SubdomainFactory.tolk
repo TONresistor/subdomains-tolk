@@ -1,9 +1,10 @@
-// Tier 0: global, free, permissionless, non-upgradeable.
-import "@gen/SubdomainCollection.code"
 import "errors"
 import "messages"
 import "prices"
 import "storage"
+// Tier 0: global, free, permissionless, non-upgradeable.
+// check-disable-next-line import-path-can-use-mappings
+import "../gen/SubdomainCollection.code"
 
 struct PendingDeployment {
     deploymentId: uint64
