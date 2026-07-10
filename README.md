@@ -37,83 +37,10 @@ Three tiers, each non-upgradeable:
 - **Resolve.** Root, then `.ton` collection, then parent item, then the frozen `next_resolver`, then our collection, then `sha256(label)`, then item, then records.
 - **Metadata.** Off-chain; the contract stores only a base URI set at creation. `set_content` (admin) re-points metadata without touching the price grid.
 
-## Interface
+## Contract specification
 
-The **admin** of a collection is the creator initially and may be transferred. In Linked mode the
-admin and parent owner are separate roles: only the parent owner can connect, disconnect, renew or
-lock the parent.
-
-Operations sent to a **Collection**:
-
-| Opcode | Op | Sender | Action |
-|---|---|---|---|
-| `0x49278399` | `RegisterSubdomain` | anyone | mint a subdomain (pay `price + 0.10`, surplus refunded) |
-| `0x97be5c56` | `ProxyEditParentRecord` | admin, Locked | edit one parent record (never its resolver) |
-| `0x5cfedae5` | `FillUpParent` | anyone, Locked | caller-funded parent `.ton` renewal |
-| `0xe0329a90` | `EnforceResolver` | anyone, Locked | caller-funded resolver re-pin |
-| `0x7969d64e` | `SetContent` | admin | update metadata URIs (prices stay fixed) |
-| `0x1e4b7535` | `WithdrawFees` | admin | withdraw collected revenue |
-| `0x2b8af82e` | `TransferAdmin` | admin | hand over the admin role |
-| `0xccef6e14` | `SetLabelReserved` | admin | reserve or free a label |
-| `0x2096dda6` | `RescueNft` | admin | rescue a mis-routed NFT; parent rescue only while Linked |
-| `0x693d3950` | `GetRoyaltyParams` | anyone | TEP-66 royalty query (replies `report_royalty_params`) |
-| `0x6c0c4b17` | `LockCollection` | factory only | initialize the derived collection (internal deployment step) |
-
-Operations sent to a subdomain **Item** (the NFT owner manages their own records):
-
-| Opcode | Op | Sender | Action |
-|---|---|---|---|
-| `0x5fcc3d14` | `TransferOwnership` | owner | transfer the subdomain NFT (TEP-62) |
-| `0x4eb1f0f9` | `ChangeDnsRecord` | owner | set or delete one DNS record (TEP-81) |
-| `0x1a0b9d51` | `EditContent` | owner | replace the full DNS record set |
-| `0x2fcb26a2` | `GetStaticData` | anyone | TEP-62 static-data query |
-
-Factory create entry points:
-
-| Opcode | Op | Sender | Action |
-|---|---|---|---|
-| `0x05138d91` | `OwnershipAssigned` | parent `.ton` | create a born-Locked collection after NFT transfer |
-| `0x4c494e4b` | `CreateLinkedCollection` | creator | deploy a creator-bound Linked collection without custody |
-| `0x52545259` | `RetryCollectionDeployment` | pending admin | replay a stored deployment after a lost deploy/callback |
-| `0x52445931` | `CollectionReady` | derived collection only | authenticated internal deployment acknowledgement |
-| `0x48444f4b` | `ParentHandoffComplete` | derived collection only | authenticated final Locked custody acknowledgement |
-
-**Factory** getters:
-
-| Getter | Type | Returns |
-|---|---|---|
-| `get_collection_address(parent)` | `address` | deterministic collection address for a parent domain |
-| `get_linked_collection_address(parent, creator)` | `address` | deterministic creator-bound Linked address |
-| `get_deployed_count()` | `int` | unique successfully acknowledged collection addresses |
-
-**Collection** getters:
-
-| Getter | Type | Returns |
-|---|---|---|
-| `get_price(charCount)` | `coins` | mint price for a label of that length |
-| `get_min_chars()` | `int` | the registry's minimum subdomain length (1-4) |
-| `is_locked()` | `bool` | whether the collection is initialized/active (true for both custody modes) |
-| `get_admin()` | `address?` | current admin (null if not locked) |
-| `get_parent_domain()` | `address` | the parent `.ton` address |
-| `get_is_linked()` | `bool` | current custody mode; may only change `true → false` |
-| `get_linked_admin()` | `address` | immutable creator witness used in Linked address derivation |
-| `get_minted_count()` | `int` | successfully initialized subdomain items |
-| `get_last_parent_fill_up()` | `int` | unix time of the last parent heartbeat attempt |
-| `get_nft_address_by_index(i)` | `address` | item address for a label hash |
-| `get_nft_content(i, c)` | `cell` | TEP-64 individual content for an item |
-| `get_collection_data()` | `(int, cell, address?)` | TEP-62 `next_item_index = -1` (hash-addressed), collection content, admin |
-| `royalty_params()` | `(int, int, address)` | TEP-66 royalty (0%, destination = admin) |
-| `dnsresolve(sub, cat)` | `(int, cell?)` | resolved prefix bits + record (routes to the item) |
-
-**Item** getters:
-
-| Getter | Type | Returns |
-|---|---|---|
-| `get_nft_data()` | `(bool, uint256, address, address?, cell?)` | init flag, index, collection, owner, content |
-| `get_domain()` | `slice` | the label bytes |
-| `get_minted_at()` | `int` | unix mint time |
-| `get_last_touch()` | `int` | unix time of the last update |
-| `dnsresolve(sub, cat)` | `(int, cell?)` | resolved prefix bits + record |
+See [`SPECS.md`](SPECS.md) for the normative storage layouts, messages, getters, permissions,
+economics, DNS behavior, recovery rules and invariants of all three contracts.
 
 ## Deployment (mainnet)
 

@@ -18,7 +18,6 @@ frontend/
 context.md
 DEPLOYMENT.md
 GOAL.md
-SPEC.md
 
 # Coverage / gas analysis artifacts
 coverage.txt
