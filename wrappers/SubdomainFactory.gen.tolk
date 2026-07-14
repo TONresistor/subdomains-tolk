@@ -20,13 +20,12 @@ struct SubdomainFactory {
 fun SubdomainFactory.fromStorage(
     storage: FactoryStorage,
     toShard: AddressShardingOptions? = null,
-    workchain: int8 = BASECHAIN,
 ): SubdomainFactory {
     val stateInit = ContractState {
         code: build("SubdomainFactory"),
         data: storage.toCell(),
     };
-    val address = AutoDeployAddress { workchain, stateInit, toShard }.calculateAddress();
+    val address = AutoDeployAddress { stateInit, toShard }.calculateAddress();
     return SubdomainFactory { address, stateInit };
 }
 
@@ -177,8 +176,4 @@ fun SubdomainFactory.getLinkedCollectionAddress(
     admin: address,
 ): address {
     return net.runGetMethod(self.address, "get_linked_collection_address", [parentDomain, admin]);
-}
-
-fun SubdomainFactory.getDeployedCount(self): int {
-    return net.runGetMethod(self.address, "get_deployed_count");
 }

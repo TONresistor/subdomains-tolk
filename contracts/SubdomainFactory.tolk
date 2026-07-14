@@ -17,6 +17,22 @@ struct PendingDeployment {
     meta: Cell<CollectionMeta>
 }
 
+struct FactoryPendingReturn {
+    deploymentId: uint64
+    parentDomain: address
+    admin: address
+    queryId: uint64
+}
+
+fun PendingDeployment.toPendingReturn(self): FactoryPendingReturn {
+    return {
+        deploymentId: self.deploymentId,
+        parentDomain: self.parentDomain,
+        admin: self.admin,
+        queryId: self.queryId,
+    };
+}
+
 const PHASE_AWAITING_COLLECTION = 0
 const PHASE_AWAITING_HANDOFF = 1
 const PHASE_RETURNING_PARENT = 2
@@ -24,9 +40,8 @@ const HANDOFF_RETRY_VALUE = ton("0.5")
 const HANDOFF_CONFIRM_VALUE = ton("0.1")
 
 struct FactoryStorage {
-    deployedCount: uint64
     pending: map<uint256, Cell<PendingDeployment>>
-    deployed: map<uint256, ()>
+    rejectedReturns: map<uint256, Cell<FactoryPendingReturn>> = []
 }
 
 fun FactoryStorage.load(): FactoryStorage {
@@ -39,7 +54,7 @@ fun FactoryStorage.save(self) {
 
 contract SubdomainFactory {
     author: "tolk-subdomains"
-    version: "2.0.0"
+    version: "3.0.0"
     description: "Global factory for permanent Locked and self-custody Linked subdomain collections."
     incomingMessages: AllowedFactoryMessage
     storage: FactoryStorage
@@ -81,7 +96,7 @@ fun sendPendingCollectionDeploy(pending: PendingDeployment, collectionCode: cell
 }
 
 fun sendParentTransfer(
-    pending: PendingDeployment,
+    pending: FactoryPendingReturn,
     to: address,
     forwardAmount: coins,
     value: coins,
@@ -125,20 +140,14 @@ fun saveAndReturnRejectedParent(
     parentDomain: address,
     admin: address,
     queryId: uint64,
-    metaCell: cell,
 ) {
-    val pending: PendingDeployment = {
+    val pending: FactoryPendingReturn = {
         deploymentId: blockchain.logicalTime(),
         parentDomain,
         admin,
         queryId,
-        handoffValue: 0,
-        isLinked: false,
-        phase: PHASE_RETURNING_PARENT,
-        // Metadata is opaque in RETURNING_PARENT.
-        meta: metaCell as Cell<CollectionMeta>,
     };
-    st.pending.set(key, pending.toCell());
+    st.rejectedReturns.set(key, pending.toCell());
     st.save();
     sendParentTransfer(
         pending,
@@ -150,12 +159,8 @@ fun saveAndReturnRejectedParent(
     );
 }
 
-fun recordCompletedDeployment(mutate st: FactoryStorage, key: uint256) {
+fun completeDeployment(mutate st: FactoryStorage, key: uint256) {
     st.pending.delete(key);
-    if (!st.deployed.exists(key)) {
-        st.deployed.set(key, ());
-        st.deployedCount += 1;
-    }
     st.save();
 }
 
@@ -214,7 +219,7 @@ fun onBouncedMessage(in: InMessageBounced) {
         var st = lazy FactoryStorage.load();
         val key = collectionKey(expected);
         if (!st.pending.exists(key)) {
-            // Authenticated value from a completed or superseded deploy attempt.
+            // Authenticated value from a completed deployment attempt.
             val lateRefund = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: lock.admin,
@@ -268,7 +273,7 @@ fun onBouncedMessage(in: InMessageBounced) {
         st.pending.set(key, pending.toCell());
         st.save();
         sendParentTransfer(
-            pending,
+            pending.toPendingReturn(),
             pending.admin,
             0,
             pending.handoffValue + in.valueCoins,
@@ -305,6 +310,12 @@ fun onBouncedMessage(in: InMessageBounced) {
                 assert (pending.admin == handoff.intendedAdmin) throw ERROR_NOT_FROM_COLLECTION;
             }
         }
+        if (st.rejectedReturns.exists(key)) {
+            val pending = st.rejectedReturns.mustGet(key).load();
+            if (pending.deploymentId == handoff.deploymentId) {
+                assert (pending.admin == handoff.intendedAdmin) throw ERROR_NOT_FROM_COLLECTION;
+            }
+        }
 
         // Refund this attempt; pending remains retryable.
         val refund = createMessage({
@@ -333,6 +344,16 @@ fun onInternalMessage(in: InMessage) {
         ).calculateAddress();
         val key = collectionKey(expectedCollection);
         var st = lazy FactoryStorage.load();
+        if (st.rejectedReturns.exists(key)) {
+            val pending = st.rejectedReturns.mustGet(key).load();
+            assert (
+                pending.deploymentId == acknowledgement.queryId
+            ) throw ERROR_NOT_FROM_COLLECTION;
+            st.rejectedReturns.delete(key);
+            st.save();
+            refundRemainingMessageValue(pending.admin, pending.queryId);
+            return;
+        }
         if (!st.pending.exists(key)) {
             return;
         }
@@ -395,11 +416,11 @@ fun onInternalMessage(in: InMessage) {
 
             var st = lazy FactoryStorage.load();
             val pendingKey = collectionKey(collAddr);
-            // Preserve the existing generation on duplicate notification.
             if (st.pending.exists(pendingKey)) {
-                refundRemainingMessageValue(admin, msg.queryId);
-                return;
+                st.pending.delete(pendingKey);
             }
+            // A new authenticated transfer proves an older rejected return completed.
+            st.rejectedReturns.delete(pendingKey);
 
             if (
                 in.valueCoins < MIN_CREATE_VALUE || !metaValid || !adminBasechain ||
@@ -411,7 +432,6 @@ fun onInternalMessage(in: InMessage) {
                     parentDomain,
                     admin,
                     msg.queryId,
-                    metaCell,
                 );
                 return;
             }
@@ -519,15 +539,9 @@ fun onInternalMessage(in: InMessage) {
             }
 
             if (pending.isLinked) {
-                recordCompletedDeployment(mutate st, key);
+                completeDeployment(mutate st, key);
                 refundRemainingMessageValue(pending.admin, pending.queryId);
                 return;
-            }
-
-            // Readiness counts deployment but does not prove custody.
-            if (!st.deployed.exists(key)) {
-                st.deployed.set(key, ());
-                st.deployedCount += 1;
             }
 
             if (msg.currentAdmin != pending.admin) {
@@ -536,7 +550,7 @@ fun onInternalMessage(in: InMessage) {
                 st.pending.set(key, pending.toCell());
                 st.save();
                 sendParentTransfer(
-                    pending,
+                    pending.toPendingReturn(),
                     pending.admin,
                     0,
                     pending.handoffValue,
@@ -549,7 +563,7 @@ fun onInternalMessage(in: InMessage) {
             st.pending.set(key, pending.toCell());
             st.save();
             sendParentTransfer(
-                pending,
+                pending.toPendingReturn(),
                 expected,
                 RESOLVER_PIN_FUND,
                 pending.handoffValue,
@@ -585,13 +599,26 @@ fun onInternalMessage(in: InMessage) {
             assert (pending.queryId == msg.queryId) throw ERROR_NOT_FROM_COLLECTION;
             assert (pending.parentDomain == msg.parentDomain) throw ERROR_NOT_FROM_COLLECTION;
             assert (pending.admin == msg.intendedAdmin) throw ERROR_NOT_FROM_COLLECTION;
-            recordCompletedDeployment(mutate st, key);
+            completeDeployment(mutate st, key);
             refundRemainingMessageValue(pending.admin, pending.queryId);
         }
 
         RetryCollectionDeployment => {
             val st = lazy FactoryStorage.load();
             val key = collectionKey(msg.collectionAddress);
+            if (st.rejectedReturns.exists(key)) {
+                val pending = st.rejectedReturns.mustGet(key).load();
+                assert (in.senderAddress == pending.admin) throw ERROR_NOT_ADMIN;
+                assert (in.valueCoins >= HANDOFF_RETRY_VALUE) throw ERROR_INSUFFICIENT_BALANCE;
+                sendParentTransfer(
+                    pending,
+                    pending.admin,
+                    0,
+                    in.valueCoins - FACTORY_GAS_MARGIN,
+                    contract.getAddress(),
+                );
+                return;
+            }
             assert (st.pending.exists(key)) throw ERROR_NOT_FROM_COLLECTION;
             val pending = st.pending.mustGet(key).load();
             assert (in.senderAddress == pending.admin) throw ERROR_NOT_ADMIN;
@@ -630,7 +657,7 @@ fun onInternalMessage(in: InMessage) {
                 // Probe a lost callback and retry the handoff in one funded operation.
                 requestParentHandoffConfirmation(pending, expected);
                 sendParentTransfer(
-                    pending,
+                    pending.toPendingReturn(),
                     expected,
                     RESOLVER_PIN_FUND,
                     in.valueCoins - HANDOFF_CONFIRM_VALUE - FACTORY_GAS_MARGIN,
@@ -641,7 +668,7 @@ fun onInternalMessage(in: InMessage) {
 
             assert (pending.phase == PHASE_RETURNING_PARENT) throw ERROR_NOT_FROM_COLLECTION;
             sendParentTransfer(
-                pending,
+                pending.toPendingReturn(),
                 pending.admin,
                 0,
                 in.valueCoins - FACTORY_GAS_MARGIN,
@@ -673,8 +700,4 @@ get fun get_linked_collection_address(parentDomain: address, admin: address): ad
         admin,
         subdomainCollectionCompiledCode(),
     ).calculateAddress();
-}
-
-get fun get_deployed_count(): int {
-    return FactoryStorage.load().deployedCount;
 }

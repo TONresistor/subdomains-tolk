@@ -23,7 +23,7 @@ get fun `test linked: Locked and Linked addresses are distinct (no hijack overla
     val parent = newActor("lparent");
     val attacker = newActor("lattacker");
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(deployer.address, { value: ton("1"), bounce: false });
 
     // The same parent maps to two different deterministic addresses by mode. This is the boundary
@@ -42,7 +42,7 @@ get fun `test linked: factory deploys a Linked collection with no .ton handoff`(
     val owner = newActor("lowner");
     val parent = newActor("lp2"); // the owner's .ton, which they KEEP
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val expected = factory.getLinkedCollectionAddress(parent.address, owner.address);
@@ -69,7 +69,6 @@ get fun `test linked: factory deploys a Linked collection with no .ton handoff`(
     expect(
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toEqual(null);
-    expect(factory.getDeployedCount()).toEqual(1);
 
     // 0.5 TON exceeds deploy + gas margin, so the surplus is explicitly returned to the creator.
     expect(
@@ -81,7 +80,7 @@ get fun `test linked: a third party cannot deploy the owner's creator-bound addr
     val owner = newActor("bound-owner");
     val attacker = newActor("bound-attacker");
     val parent = newActor("bound-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val ownerAddress = factory.getLinkedCollectionAddress(parent.address, owner.address);
@@ -95,13 +94,12 @@ get fun `test linked: a third party cannot deploy the owner's creator-bound addr
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_NOT_ADMIN });
     expect(testing.isDeployed(ownerAddress)).toEqual(false);
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 get fun `test linked: duplicate create returns deploy value to the creator`() {
     val owner = newActor("duplicate-owner");
     val parent = newActor("duplicate-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     factory.sendCreateLinkedCollection(
@@ -129,21 +127,35 @@ get fun `test linked: duplicate create returns deploy value to the creator`() {
     expect(SubdomainCollection.fromAddress(linked).getAdmin()).toEqual(owner.address);
 }
 
-get fun `test linked: immutable creator witness survives TransferAdmin`() {
-    val (coll, _parent, owner, user) = deployLinkedCollection();
+get fun `test linked: immutable creator witness survives a parent-proven bundle transfer`() {
+    val (coll, parent, owner, user) = deployLinkedCollection();
     expect(coll.getLinkedAdmin()).toEqual(owner.address);
 
-    val moved = coll.sendTransferAdmin(
+    val direct = coll.sendTransferAdmin(
         owner.address,
-        77,
+        76,
         user.address,
         { value: ton("0.1"), bounce: true },
+    );
+    expect(direct).toHaveFailedTx({
+        to: coll.address,
+        exitCode: ERROR_LINKED_OWNER_PROOF_REQUIRED,
+    });
+
+    val moved = coll.sendAny(
+        parent.address,
+        OwnershipAssigned {
+            queryId: 77,
+            oldOwnerAddress: owner.address,
+            payload: linkedActionPayload(LINKED_ACTION_TRANSFER_BUNDLE, user.address),
+        }.toCell(),
+        { value: MIN_PARENT_RETURN_VALUE, bounce: false },
     );
     expect(moved).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getAdmin()).toEqual(user.address);
     expect(coll.getLinkedAdmin()).toEqual(owner.address);
     expect(
-        moved.findTransaction<AdminAssigned>({ from: coll.address, to: user.address }),
+        moved.findTransaction<TransferOwnership>({ from: coll.address, to: parent.address }),
     ).toBeNotNull();
 }
 
@@ -151,7 +163,7 @@ get fun `test linked: factory rejects an underfunded Linked create`() {
     val owner = newActor("lowner3");
     val parent = newActor("lp3");
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
@@ -163,13 +175,12 @@ get fun `test linked: factory rejects an underfunded Linked create`() {
         { value: ton("0.1"), bounce: true }, // < COLLECTION_DEPLOY_VALUE + margin
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 get fun `test linked: factory rejects one nanotON below the exact funding boundary`() {
     val owner = newActor("boundary-owner");
     val parent = newActor("boundary-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
@@ -181,13 +192,12 @@ get fun `test linked: factory rejects one nanotON below the exact funding bounda
         { value: ton("0.259999999"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 get fun `test linked: factory accepts the exact deploy plus gas boundary`() {
     val owner = newActor("exact-owner");
     val parent = newActor("exact-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
@@ -226,7 +236,7 @@ get fun `test linked: factory rejects a masterchain admin before sender binding`
     val owner = newActor("mc-admin-owner");
     val parent = newActor("mc-admin-parent");
     val mcAdmin = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("linked-mc-admin"));
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
@@ -238,13 +248,12 @@ get fun `test linked: factory rejects a masterchain admin before sender binding`
         { value: ton("0.5"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_WRONG_WORKCHAIN });
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 get fun `test linked: factory rejects a masterchain parent`() {
     val owner = newActor("mc-parent-owner");
     val mcParent = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("linked-mc-parent"));
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
@@ -256,13 +265,12 @@ get fun `test linked: factory rejects a masterchain parent`() {
         { value: ton("0.5"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_WRONG_WORKCHAIN });
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 get fun `test linked: factory rejects an invalid price grid`() {
     val owner = newActor("bad-grid-owner");
     val parent = newActor("bad-grid-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
     val badGrid: PriceConfig = {
         minChars: 4,
@@ -276,7 +284,7 @@ get fun `test linked: factory rejects an invalid price grid`() {
         p8: ton("2"),
         p9: ton("1"),
         p10: ton("0.5"),
-        pRest: ton("0.01"), // below MIN_NAME_PRICE
+        pRest: ton("0.6"), // non-monotonic: pRest exceeds p10
     };
     val badMeta: CollectionMeta = {
         priceConfig: badGrid.toCell(),
@@ -293,7 +301,6 @@ get fun `test linked: factory rejects an invalid price grid`() {
         { value: ton("0.5"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_UNKNOWN_OP });
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 get fun `test linked: skeleton rejects an admin different from its creator binding`() {
@@ -370,11 +377,11 @@ get fun `test linked: proxy-edit parent record is rejected (no custody)`() {
 
 // ============================ Linked -> Locked upgrade ============================
 
-get fun `test linked: transferring the parent .ton in upgrades Linked -> Locked`() {
+get fun `test linked: an accidental parent transfer is safely returned without changing mode`() {
     val (coll, parent, owner, _user) = deployLinkedCollection();
     expect(coll.getIsLinked()).toEqual(true);
 
-    // the owner transfers their parent .ton INTO the collection (the upgrade trigger)
+    // No v3 action means safe return, never an implicit custody transition.
     val landed = coll.sendAny(
         parent.address,
         OwnershipAssigned {
@@ -386,18 +393,43 @@ get fun `test linked: transferring the parent .ton in upgrades Linked -> Locked`
     );
     expect(landed).toHaveSuccessfulTx({ to: coll.address });
 
-    // custody taken: the flag flipped, and the collection pinned next_resolver on the parent
-    expect(coll.getIsLinked()).toEqual(false);
+    expect(coll.getIsLinked()).toEqual(true);
     expect(
-        landed.findTransaction<ChangeDnsRecord>({ from: coll.address, to: parent.address }),
+        landed.findTransaction<TransferOwnership>({ from: coll.address, to: parent.address }),
     ).toBeNotNull();
 
-    // custody ops now work (it is a normal Locked collection from here on)
-    val fill = coll.sendFillUpParent(owner.address, 10, { value: ton("1"), bounce: true });
-    expect(fill).toHaveSuccessfulTx({ to: coll.address });
+    val invalidInline = beginCell()
+        .storeBool(false)
+        .storeRef(
+            LinkedParentAction {
+                action: LINKED_ACTION_CLAIM,
+                target: null,
+                amount: 0,
+            }.toCell(),
+        )
+        .endCell()
+        .beginParse();
+    val inlineClaimant = newActor("linked-inline-claimant");
+    val rejectedInline = coll.sendAny(
+        parent.address,
+        OwnershipAssigned {
+            queryId: 10,
+            oldOwnerAddress: inlineClaimant.address,
+            payload: invalidInline,
+        }.toCell(),
+        { value: ton("0.2"), bounce: false },
+    );
+    expect(rejectedInline).toHaveSuccessfulTx({ to: coll.address });
+    expect(coll.getAdmin()).toEqual(owner.address);
+    expect(
+        rejectedInline.findTransaction<TransferOwnership>({
+            from: coll.address,
+            to: parent.address,
+        }),
+    ).toBeNotNull();
 }
 
-get fun `test linked: custody commits even when the landing cannot fund the resolver pin`() {
+get fun `test linked: explicit Locked conversion commits even when the pin cannot be funded`() {
     val master = newActor("thin-master");
     val parent = newActor("thin-parent");
     val owner = newActor("thin-owner");
@@ -422,14 +454,13 @@ get fun `test linked: custody commits even when the landing cannot fund the reso
     );
     expect(coll.getIsLinked()).toEqual(true);
 
-    // The collection remains below the 0.05 TON pin value. IGNORE_ERRORS makes custody the
-    // authoritative transition: the NFT remains locked and EnforceResolver can repair the pin later.
+    // Explicit conversion is authoritative even when the best-effort pin action cannot be created.
     val landed = coll.sendAny(
         parent.address,
         OwnershipAssigned {
             queryId: 2,
             oldOwnerAddress: owner.address,
-            payload: emptyPayload(),
+            payload: linkedActionPayload(LINKED_ACTION_CONVERT_LOCKED),
         }.toCell(),
         { value: ton("0.001"), bounce: false },
     );
@@ -440,34 +471,35 @@ get fun `test linked: custody commits even when the landing cannot fund the reso
     ).toEqual(null);
 }
 
-get fun `test linked: a stray parent .ton can be rescued in Linked mode (no strand)`() {
+get fun `test linked: cached admin cannot rescue the parent`() {
     val (coll, parent, owner, _user) = deployLinkedCollection();
 
-    // If the parent .ton ever ends up held by a Linked collection, the admin MUST be able to return
-    // it — otherwise it is permanently stranded. In Linked mode rescuing the parent is allowed.
     val rescue = coll.sendRescueNft(
-        owner.address,  // admin
+        owner.address,
         1,
-        parent.address, // the parent .ton itself
-        owner.address,  // send it back to the owner
+        parent.address,
+        owner.address,
         { value: ton("0.2"), bounce: true },
     );
-    expect(rescue).toHaveSuccessfulTx({ to: coll.address });
+    expect(rescue).toHaveFailedTx({
+        to: coll.address,
+        exitCode: ERROR_RESCUE_PARENT_FORBIDDEN,
+    });
     expect(
         rescue.findTransaction<TransferOwnership>({ from: coll.address, to: parent.address }),
-    ).toBeNotNull();
+    ).toEqual(null);
 }
 
 get fun `test linked: after upgrade to Locked the parent is rescue-protected again (anti-rug)`() {
     val (coll, parent, owner, _user) = deployLinkedCollection();
 
-    // upgrade Linked -> Locked
+    // explicit Linked -> Locked conversion
     coll.sendAny(
         parent.address,
         OwnershipAssigned {
             queryId: 1,
             oldOwnerAddress: owner.address,
-            payload: emptyPayload(),
+            payload: linkedActionPayload(LINKED_ACTION_CONVERT_LOCKED),
         }.toCell(),
         { value: ton("0.2"), bounce: false },
     );
@@ -485,7 +517,7 @@ get fun `test linked: after upgrade to Locked the parent is rescue-protected aga
 }
 
 get fun `test linked: a stray non-parent NFT never force-locks a Linked collection`() {
-    val (coll, _parent, _owner, _user) = deployLinkedCollection();
+    val (coll, parent, owner, _user) = deployLinkedCollection();
     val stranger = newActor("stranger");
 
     // an OwnershipAssigned from anyone other than the parent .ton must NOT take custody
@@ -500,4 +532,9 @@ get fun `test linked: a stray non-parent NFT never force-locks a Linked collecti
     );
     expect(res).toHaveSuccessfulTx({ to: coll.address }); // absorbed, no throw
     expect(coll.getIsLinked()).toEqual(true);             // still self-custody
+    expect(coll.getAdmin()).toEqual(owner.address);
+    expect(coll.getParentReturn().pending).toEqual(false);
+    expect(
+        res.findTransaction<TransferOwnership>({ from: coll.address, to: parent.address }),
+    ).toEqual(null);
 }

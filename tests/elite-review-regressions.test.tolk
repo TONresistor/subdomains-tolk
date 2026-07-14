@@ -47,7 +47,7 @@ fun expectCarryAllRefund(actual: coins, inbound: coins) {
 get fun `test elite review: pre-compute dust cannot enter factory recovery state`() {
     val owner = newActor("precompute-dust-owner");
     val parent = newActor("precompute-dust-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("0.01"), bounce: false });
 
     // At one nanotON the TVM skips compute before contract code runs. This pins the protocol boundary:
@@ -80,7 +80,7 @@ get fun `test elite review: pre-compute dust cannot enter factory recovery state
 get fun `test elite review: dust Locked rejection persists an admin-funded custody recovery`() {
     val owner = newActor("dust-rejection-owner");
     val parent = newActor("dust-rejection-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("0.01"), bounce: false });
 
     // Canonical TON DNS allows a very small notification forward amount. This funds the factory's
@@ -105,7 +105,6 @@ get fun `test elite review: dust Locked rejection persists an admin-funded custo
     expect(internalMessageValue(dustReturn!.loadInMsg<TransferOwnership>().info)).toBeLess(
         ton("0.001"),
     );
-    expect(factory.getDeployedCount()).toEqual(0);
 
     val expectedCollection = factory.getCollectionAddress(parent.address);
     val retry = factory.sendAny(
@@ -157,6 +156,7 @@ get fun `test elite review: hash-addressed collection reports TEP-62 next index 
 
     val (_item, _res) = mintSubdomain(coll, user, "alice");
     expect(coll.getMintedCount()).toEqual(1);
+    expect(coll.getIsMintPending(labelIndex("alice"))).toEqual(false);
     expect(coll.getCollectionData().nextItemIndex).toEqual(-1);
     expect(coll.getCollectionData().ownerAddress).toEqual(owner.address);
 
@@ -190,7 +190,8 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
 
     // Execute only the collection transaction: its item deployment remains undelivered.
     val mintStep = testing.processSingleTraceStep(user.address, register);
-    expect(coll.getMintedCount()).toEqual(1);
+    expect(coll.getMintedCount()).toEqual(0);
+    expect(coll.getIsMintPending(labelIndex("alice"))).toEqual(true);
     val deployOut = mintStep.outMessages.at<SubdomainInit>(0);
     val originalInit = deployOut.loadBody();
     val itemAddress = coll.getNftAddressByIndex(labelIndex("alice"));
@@ -227,6 +228,7 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
     val rollback = testing.processSingleTraceStep(itemAddress, bounced);
 
     expect(coll.getMintedCount()).toEqual(0);
+    expect(coll.getIsMintPending(labelIndex("alice"))).toEqual(false);
     expect(rollback.outMessages.size()).toEqual(1);
     val refund = rollback.outMessages.at<Excesses>(0);
     expect(refund.loadBody().queryId).toEqual(71);
@@ -241,7 +243,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     val owner = newActor("bounce-owner");
     val parent = newActor("bounce-parent");
     val attacker = newActor("bounce-attacker");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val request = createMessage({
@@ -320,7 +322,6 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     }).bounced();
     val recovery = testing.processSingleTraceStep(expectedCollection, bounced);
 
-    expect(factory.getDeployedCount()).toEqual(0);
     expect(recovery.outMessages.size()).toEqual(1);
     val handoffMessage = recovery.outMessages.at<TransferOwnership>(0);
     expect(handoffMessage.info.value.grams).toEqual(ton("0.48"));
@@ -389,7 +390,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     val owner = newActor("retry-locked-owner");
     val parent = newActor("retry-locked-parent");
     val attacker = newActor("retry-locked-attacker");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val request = createMessage({
@@ -410,7 +411,6 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     val deployMessage = OutMessage { messageCell: createStep.outMessages.atCell(0) };
     testing.processSingleTraceStep(factory.address, deployMessage);
     expect(testing.isDeployed(expectedCollection)).toEqual(true);
-    expect(factory.getDeployedCount()).toEqual(0);
 
     val correctReady: CollectionReady = {
         deploymentId: originalLock.deploymentId,
@@ -505,7 +505,6 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     expect(
         retry.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toBeNotNull();
-    expect(factory.getDeployedCount()).toEqual(1);
 
     // The first deploy attempt can bounce after a retry has already advanced the generation to the
     // handoff phase. Refund that delayed value without rolling the phase or custody state back.
@@ -640,7 +639,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
 get fun `test elite review: Linked create retries an in-flight request without overwriting it`() {
     val owner = newActor("pending-owner");
     val parent = newActor("pending-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val first = createMessage({
@@ -680,14 +679,13 @@ get fun `test elite review: Linked create retries an in-flight request without o
     expect(
         testing.isDeployed(factory.getLinkedCollectionAddress(parent.address, owner.address)),
     ).toEqual(true);
-    expect(factory.getDeployedCount()).toEqual(1);
 }
 
 get fun `test elite review: reauctioned Locked parent bypasses the old-admin collection`() {
     val oldOwner = newActor("reauction-old-owner");
     val newOwner = newActor("reauction-new-owner");
     val parent = newActor("reauction-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(oldOwner.address, { value: ton("1"), bounce: false });
 
     val first = factory.sendOwnershipAssigned(
@@ -742,7 +740,6 @@ get fun `test elite review: reauctioned Locked parent bypasses the old-admin col
     expect(returned.transferData.newOwnerAddress).toEqual(newOwner.address);
     expect(returned.transferData.forwardAmount).toEqual(0);
     expect(returned.transferData.responseDestination).toEqual(factory.address);
-    expect(factory.getDeployedCount()).toEqual(1);
 
     val factoryBalanceBeforeReauctionAck = testing.getAccountBalance(factory.address);
     val acknowledged = factory.sendAny(
@@ -781,7 +778,7 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
     val initialAdmin = newActor("handoff-race-initial-admin");
     val nextAdmin = newActor("handoff-race-next-admin");
     val parent = newActor("handoff-race-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(initialAdmin.address, { value: ton("1"), bounce: false });
 
     val created = factory.sendOwnershipAssigned(
@@ -862,7 +859,7 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
 
 get fun `test elite review: factory rejects null owner and unknown op`() {
     val caller = newActor("factory-negative");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(caller.address, { value: ton("1"), bounce: false });
 
     val nullOwner = factory.sendOwnershipAssigned(

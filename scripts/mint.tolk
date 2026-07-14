@@ -22,16 +22,19 @@ fun main() {
     val coll = SubdomainCollection.fromAddress(collectionAddress!);
 
     val charCount = label!.beginParse().remainingBitsCount() / BYTE_SIZE;
-    val price = coll.getPrice(charCount);
-    val sendValue = price + ITEM_DEPLOY_COST + MINT_FEE_BUFFER;
+    val quote = coll.getMintQuote(minter.address, charCount);
+    if (!quote.allowed) {
+        println("Mint is not allowed for {}", minter.address);
+        return;
+    }
 
     val itemAddr = coll.getNftAddressByIndex(label!.beginParse().hash());
     println(
         "Label {} ({} chars): price {}, send {}, item at {}",
         label!,
         charCount,
-        price,
-        sendValue,
+        quote.effectivePrice,
+        quote.requiredValue,
         itemAddr,
     );
 
@@ -41,7 +44,7 @@ fun main() {
         label!.beginParse(),
         true,
         null,
-        { value: sendValue, bounce: true },
+        { value: quote.requiredValue, bounce: true },
     );
     if (res.waitForFirstTransaction() == null) {
         println("register was not confirmed");

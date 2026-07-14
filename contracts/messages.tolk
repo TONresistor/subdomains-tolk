@@ -133,6 +133,12 @@ struct (0x2428aaa6) SubdomainInit {
     initialRecords: Cell<DnsRecords>?
 }
 
+struct (0x49524459) ItemReady {
+    queryId: uint64
+    index: uint256
+    minter: address
+}
+
 struct (0x49278399) RegisterSubdomain {
     queryId: uint64
     label: Cell<RemainingBitsAndRefs> // bare label bytes, e.g. "alice" (no trailing \0)
@@ -184,4 +190,31 @@ struct (0x2096dda6) RescueNft {
     queryId: uint64
     nftAddress: address
     toAddress: address
+}
+
+struct (0x41434353) SetAccessMode {
+    queryId: uint64
+    accessMode: uint8
+}
+
+struct (0x414c4c57) SetAllowlistEntry {
+    queryId: uint64
+    wallet: address
+    allowed: bool
+}
+
+struct (0x52505254) RetryParentReturn {
+    queryId: uint64
+}
+
+struct (0x434d494e) ConfirmMint {
+    queryId: uint64
+    index: uint256
+}
+
+// This struct is placed in the TEP-62 forward_payload, normally behind the Either ref bit.
+struct (0x4c4e4b33) LinkedParentAction {
+    action: uint8
+    target: address?
+    amount: coins // only used by CLAIM_WITHDRAW; 0 means max
 }

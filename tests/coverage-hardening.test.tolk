@@ -25,7 +25,7 @@ fun gridPayload(grid: PriceConfig): RemainingBitsAndRefs {
 fun sendCreate(grid: PriceConfig): SendResultList {
     val owner = newActor("cgo");
     val parent = newActor("cgp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
     return factory.sendOwnershipAssigned(
         parent.address,
@@ -73,8 +73,8 @@ get fun `test cover: create refuses a non-monotonic price grid`() {
     expect(res.findTransaction({ deploy: true })).toEqual(null);
 }
 
-// grid validation: a below-floor cheapest tier is refused
-get fun `test cover: create refuses a grid below the price floor`() {
+// v3 accepts small and zero prices; deployment/execution funding remains separate.
+get fun `test cover: create accepts a price below the former floor`() {
     val belowFloor: PriceConfig = {
         minChars: 4,
         p1: ton("100"),
@@ -87,14 +87,13 @@ get fun `test cover: create refuses a grid below the price floor`() {
         p8: ton("2"),
         p9: ton("1"),
         p10: ton("0.5"),
-        pRest: ton("0.04"), // < MIN_NAME_PRICE 0.05
+        pRest: ton("0.04"),
     };
     val res = sendCreate(belowFloor);
-    expect(res.findTransaction({ deploy: true })).toEqual(null);
+    expect(res.findTransaction({ deploy: true })).toBeNotNull();
 }
 
-// a just-valid grid (cheapest exactly at the floor, monotonic) is accepted
-get fun `test cover: create accepts a grid exactly at the floor`() {
+get fun `test cover: create accepts a monotonic equal-price grid`() {
     val atFloor: PriceConfig = {
         minChars: 4,
         p1: ton("0.05"),
@@ -382,7 +381,7 @@ get fun `test cover: a locked collection rejects a re-lock`() {
 // the factory safely ignores a bare value top-up (empty body)
 get fun `test cover: factory ignores an empty-body top-up`() {
     val someone = newActor("ftu");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(someone.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendAny(
@@ -391,14 +390,13 @@ get fun `test cover: factory ignores an empty-body top-up`() {
         { value: ton("0.5"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
-    expect(factory.getDeployedCount()).toEqual(0);
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
 }
 
 // the factory silently accepts an Excesses top-up (NFT change), no deploy
 get fun `test cover: factory ignores an Excesses top-up`() {
     val someone = newActor("fex");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(someone.address, { value: ton("1"), bounce: false });
 
     val res = factory.sendAny(
@@ -407,14 +405,13 @@ get fun `test cover: factory ignores an Excesses top-up`() {
         { value: ton("0.5"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 // a .ton transferred with NO config payload is refunded, never deployed-broken
 get fun `test cover: factory refunds a transfer that carries no config`() {
     val owner = newActor("ncfo");
     val parent = newActor("ncfp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     // sufficient value, but the forward payload has no meta ref -> must refund (not deploy)
@@ -429,13 +426,14 @@ get fun `test cover: factory refunds a transfer that carries no config`() {
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toBeNotNull();
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
-// withdraw-all keeps only the small operating floor (no lease reserve); revenue is fully released
-get fun `test cover: withdraw-all retains only the operating floor`() {
+// v3 withdraws accounted revenue without sweeping operational funding or accidental top-ups.
+get fun `test cover: withdraw-all releases accounted revenue only`() {
     val (coll, _parent, owner, user) = deployLockedCollection();
-    mintSubdomain(coll, user, "alice", ton("20")); // 5 TON revenue retained
+    val (item, mintResult) = mintSubdomain(coll, user, "alice", ton("20"));
+    expect(mintResult).toHaveSuccessfulTx({ from: item.address, to: coll.address });
+    expect(coll.getWithdrawableRevenue()).toEqual(ton("5"));
 
     val res = coll.sendWithdrawFees(owner.address, 1, 0, { value: ton("0.05"), bounce: true });
     expect(res).toHaveSuccessfulTx({ from: coll.address, to: owner.address });
@@ -443,6 +441,6 @@ get fun `test cover: withdraw-all retains only the operating floor`() {
     val kept = testing.getAccountBalance(coll.address);
     expect(
         kept >= COLLECTION_MIN_BALANCE,
-    ).toEqual(true);                          // floor kept: collection stays operational
-    expect(kept < ton("0.25")).toEqual(true); // the ~5 TON revenue left
+    ).toEqual(true);
+    expect(coll.getWithdrawableRevenue()).toEqual(0);
 }

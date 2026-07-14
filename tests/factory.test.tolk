@@ -14,7 +14,7 @@ get fun `test factory: create deploys a locked collection + hands off the .ton`(
     val owner = newActor("fowner");
     val parent = newActor("fparent"); // stand-in for the parent .ton DnsItem
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val expectedColl = factory.getCollectionAddress(parent.address);
@@ -56,14 +56,13 @@ get fun `test factory: create deploys a locked collection + hands off the .ton`(
     val proof = FactoryHandoff.fromCell(proofPayload.loadRef());
     expect(proof.intendedAdmin).toEqual(owner.address);
     expect(transfer.transferData.responseDestination).toEqual(owner.address);
-    expect(factory.getDeployedCount()).toEqual(1);
 }
 
 get fun `test factory: underfunded create returns the .ton, deploys nothing`() {
     val owner = newActor("fowner2");
     val parent = newActor("fparent2");
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val payload = beginCell().storeRef(makeMeta().toCell()).endCell().beginParse();
@@ -80,7 +79,6 @@ get fun `test factory: underfunded create returns the .ton, deploys nothing`() {
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toBeNotNull();
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 get fun `test factory: two parents get two distinct collections`() {
@@ -88,7 +86,7 @@ get fun `test factory: two parents get two distinct collections`() {
     val parentA = newActor("parentA");
     val parentB = newActor("parentB");
 
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(deployer.address, { value: ton("1"), bounce: false });
 
     val addrA = factory.getCollectionAddress(parentA.address);

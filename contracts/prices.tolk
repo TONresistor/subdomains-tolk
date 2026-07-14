@@ -1,11 +1,11 @@
-// Pricing by label character count. Chosen at creation, immutable thereafter.
+// Pricing by label character count. Chosen at collection creation and immutable afterwards.
 // One price per length: p1 (1-char) .. p10 (10-char), then pRest (11+). Short names are the most
 // premium, so the grid is non-increasing. minChars gates the shortest mintable length.
 // 11 coins fit one cell for any realistic price (even 10M TON/name is ~712 bits < 1023); the
 // theoretical worst case (varuint16 max) is unreachable, so suppress the static overflow check.
 @overflow1023_policy("suppress")
 struct PriceConfig {
-    minChars: uint8 // shortest allowed subdomain (1..4), chosen at creation, frozen
+    minChars: uint8 // shortest allowed subdomain (1..4), frozen with the price grid
     p1: coins
     p2: coins
     p3: coins
@@ -19,11 +19,9 @@ struct PriceConfig {
     pRest: coins    // 11+ chars
 }
 
-const MIN_NAME_PRICE = ton("0.05") // floor on the cheapest tier; rejects degenerate/zero grids at create
 const MAX_MIN_CHARS = 4 // a registry may set its minimum to 1, 2, 3 or 4
 
-// A grid is valid iff minChars is in range, prices are non-increasing by length, and the cheapest
-// tier is above the floor.
+// Zero is a valid protocol price. Mints still have to fund item deployment and execution.
 fun PriceConfig.isValid(self): bool {
     return self.minChars >= 1 && self.minChars <= MAX_MIN_CHARS && self.p1 >= self.p2 &&
     self.p2 >= self.p3 &&
@@ -34,8 +32,7 @@ fun PriceConfig.isValid(self): bool {
     self.p7 >= self.p8 &&
     self.p8 >= self.p9 &&
     self.p9 >= self.p10 &&
-    self.p10 >= self.pRest &&
-    self.pRest >= MIN_NAME_PRICE;
+    self.p10 >= self.pRest;
 }
 
 fun PriceConfig.priceForCharCount(self, n: int): coins {

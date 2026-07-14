@@ -4,6 +4,7 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
 import "@acton/testing/expect"
+import "@acton/tlb/either"
 import "@acton/types/transaction"
 import "@contracts/messages"
 import "@contracts/storage"
@@ -21,7 +22,7 @@ fun createPayload(): RemainingBitsAndRefs {
 get fun `test funding: mainnet repro - thin factory + 0.4 inbound never strands the NFT`() {
     val owner = newActor("ofo");
     val parent = newActor("ofp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(
         owner.address,
         { value: ton("0.1"), bounce: false },
@@ -46,7 +47,7 @@ get fun `test funding: mainnet repro - thin factory + 0.4 inbound never strands 
 get fun `test funding: create succeeds at exact minimum with a dust factory balance`() {
     val owner = newActor("ofo2");
     val parent = newActor("ofp2");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("0.01"), bounce: false }); // dust own balance
 
     val expectedColl = factory.getCollectionAddress(parent.address);
@@ -72,7 +73,6 @@ get fun `test funding: create succeeds at exact minimum with a dust factory bala
     expect(
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toBeNotNull();
-    expect(factory.getDeployedCount()).toEqual(1);
 }
 
 // Garbage config payload (unparseable meta) must take the refund path, never throw
@@ -80,7 +80,7 @@ get fun `test funding: create succeeds at exact minimum with a dust factory bala
 get fun `test funding: garbage meta payload refunds the .ton instead of stranding it`() {
     val owner = newActor("ofo3");
     val parent = newActor("ofp3");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
 
     // a ref that is NOT a CollectionMeta (no 3 sub-refs)
@@ -98,5 +98,77 @@ get fun `test funding: garbage meta payload refunds the .ton instead of strandin
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toBeNotNull();
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
-    expect(factory.getDeployedCount()).toEqual(0);
+}
+
+get fun `test funding: rejected custody does not retain caller metadata`() {
+    val owner = newActor("bounded-return-owner");
+    val parent = newActor("bounded-return-parent");
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
+    factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
+    val cellsBefore = testing.getAccountState(factory.address)!.storageStat.used.cells;
+
+    var amplified = beginCell().storeUint(0, 1).endCell();
+    repeat (64) {
+        amplified = beginCell().storeUint(0, 1).storeRef(amplified).endCell();
+    }
+    val payload = beginCell().storeRef(amplified).endCell().beginParse();
+    val rejected = factory.sendOwnershipAssigned(
+        parent.address,
+        10,
+        owner.address,
+        payload,
+        { value: ton("1"), bounce: false },
+    );
+    expect(rejected).toHaveSuccessfulTx({ to: factory.address });
+    expect(testing.getAccountState(factory.address)!.storageStat.used.cells).toBeLessOrEqual(
+        cellsBefore + 8,
+    );
+
+    val returned = rejected.findTransaction<TransferOwnership>({
+        from: factory.address,
+        to: parent.address,
+    })!;
+    val returnEither = returned.loadInMsg<TransferOwnership>().body;
+    val returnBody = match (returnEither) {
+        TlbEitherLeft => returnEither.value,
+        TlbEitherRight => returnEither.value.load(),
+    };
+    val acknowledged = factory.sendAny(
+        parent.address,
+        Excesses { queryId: returnBody.queryId }.toCell(),
+        { value: ton("0.05"), bounce: false },
+    );
+    expect(acknowledged).toHaveSuccessfulTx({ to: factory.address });
+    expect(testing.getAccountState(factory.address)!.storageStat.used.cells).toBeLessOrEqual(
+        cellsBefore + 1,
+    );
+}
+
+get fun `test funding: a later valid parent transfer replaces a stale rejection receipt`() {
+    val owner = newActor("stale-return-owner");
+    val parent = newActor("stale-return-parent");
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
+    factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
+
+    val junk = beginCell().storeRef(beginCell().storeUint(7, 3).endCell()).endCell().beginParse();
+    factory.sendOwnershipAssigned(
+        parent.address,
+        20,
+        owner.address,
+        junk,
+        { value: ton("1"), bounce: false },
+    );
+
+    val recovered = factory.sendOwnershipAssigned(
+        parent.address,
+        21,
+        owner.address,
+        createPayload(),
+        { value: MIN_CREATE_VALUE, bounce: false },
+    );
+    expect(recovered).toHaveSuccessfulTx({
+        from: factory.address,
+        to: factory.getCollectionAddress(parent.address),
+        deploy: true,
+    });
 }

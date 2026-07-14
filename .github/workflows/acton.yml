@@ -2,7 +2,7 @@ name: Acton
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, v3]
   pull_request:
     branches: [main, dev]
 
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -42,19 +42,24 @@ jobs:
       - name: Build
         run: acton build
 
-      - name: Test and coverage
-        run: acton test tests --coverage --coverage-format text --coverage-file coverage.txt --coverage-minimum-percent 80
-
-      - name: Factory security mutations
-        run: acton test tests/mutation-security.test.tolk --mutate --mutate-contract SubdomainFactory --mutation-levels critical --mutation-id 6,8,9,20,21,23,28,67,72,73,99,104,105 --mutation-minimum-percent 100
-
-      - name: Collection security mutations
-        run: acton test tests/mutation-security.test.tolk --mutate --mutate-contract SubdomainCollection --mutation-levels critical --mutation-id 8,26,27,63,71,83,84,88,102,103,104,105,108,110,129,130,133,136,138 --mutation-minimum-percent 100
-
-      - name: Item security mutations
+      - name: Generated wrappers
         run: |
-          acton test tests/mutation-security.test.tolk --mutate --mutate-contract SubdomainItem --mutation-levels critical --mutation-id 30,41 --mutation-minimum-percent 100
-          acton test tests/mutation-security.test.tolk --mutate --mutate-contract SubdomainItem --mutation-levels critical,major --mutation-id 13,43,44,60 --mutation-minimum-percent 100
+          acton wrapper SubdomainItem
+          acton wrapper SubdomainCollection
+          acton wrapper SubdomainFactory
+          git diff --exit-code -- wrappers
+
+      - name: Test and coverage
+        run: acton test tests --coverage --coverage-format text --coverage-file coverage.txt --coverage-minimum-percent 81
+
+      - name: Factory critical mutations
+        run: acton test tests --mutate --mutate-contract SubdomainFactory --mutation-levels critical --mutation-minimum-percent 70
+
+      - name: Collection critical mutations
+        run: acton test tests --mutate --mutate-contract SubdomainCollection --mutation-levels critical --mutation-minimum-percent 98
+
+      - name: Item critical mutations
+        run: acton test tests --mutate --mutate-contract SubdomainItem --mutation-levels critical --mutation-minimum-percent 95
 
       - name: Check
         run: acton check

@@ -19,13 +19,12 @@ struct SubdomainItem {
 fun SubdomainItem.fromStorage(
     storage: ItemStorageNotInitialized,
     toShard: AddressShardingOptions? = null,
-    workchain: int8 = BASECHAIN,
 ): SubdomainItem {
     val stateInit = ContractState {
         code: build("SubdomainItem"),
         data: storage.toCell(),
     };
-    val address = AutoDeployAddress { workchain, stateInit, toShard }.calculateAddress();
+    val address = AutoDeployAddress { stateInit, toShard }.calculateAddress();
     return SubdomainItem { address, stateInit };
 }
 

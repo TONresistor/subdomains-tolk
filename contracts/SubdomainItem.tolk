@@ -6,7 +6,7 @@ import "storage"
 
 contract SubdomainItem {
     author: "tolk-subdomains"
-    version: "2.0.0"
+    version: "3.0.0"
     description: "Subdomain NFT item (TEP-62) holding its own DNS records."
     incomingMessages: AllowedItemMessage
     storage: ItemStorageInitialized
@@ -111,6 +111,17 @@ fun onInternalMessage(in: InMessage) {
             validUntil: 0,
         };
         initStorage.save();
+        val ready = createMessage({
+            bounce: BounceMode.NoBounce,
+            dest: uninit.collectionAddress,
+            value: ITEM_READY_VALUE,
+            body: ItemReady {
+                queryId: init.queryId,
+                index: init.index,
+                minter: init.minter,
+            },
+        });
+        ready.send(SEND_MODE_PAY_FEES_SEPARATELY);
         return;
     }
 

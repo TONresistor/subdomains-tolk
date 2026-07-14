@@ -98,7 +98,7 @@ get fun `test resolve: item returns its own wallet record`() {
     val (item, _res) = mintSubdomain(coll, user, "alice");
 
     // TEP-81 regression: query with the LITERAL sha256("wallet") (what wallets/tonapi use), not the
-    // CAT_WALLET constant — proves the default wallet record is keyed standard, not `.toBase256()`.
+    // CAT_WALLET keeps the default wallet record keyed per standard, not `.toBase256()`.
     val walletResolved = item.dnsresolve(
         makeDotSlice(),
         0xe8d44050873dba865aa7c170ab4cce64d90839a34dcfd6cf71d14e0205443b1b,
