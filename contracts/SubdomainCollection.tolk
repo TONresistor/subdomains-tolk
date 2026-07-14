@@ -9,8 +9,8 @@ import "../gen/SubdomainItem.code"
 
 contract SubdomainCollection {
     author: "tolk-subdomains"
-    version: "2.0.0"
-    description: "Per-domain registry with Locked or Linked parent custody, minting, DNS and transferable admin."
+    version: "3.0.0"
+    description: "Per-domain DNS registry with claimable Linked ownership, access policy and immutable pricing."
     incomingMessages: AllowedCollectionMessage
     storage: CollectionStorage
     storageAtDeployment: CollectionSkeleton
@@ -18,7 +18,11 @@ contract SubdomainCollection {
 
 type AllowedCollectionMessage =
     | RegisterSubdomain
+    | ItemReady
+    | ReportStaticData
     | SetContent
+    | SetAccessMode
+    | SetAllowlistEntry
     | WithdrawFees
     | TransferAdmin
     | ProxyEditParentRecord
@@ -28,14 +32,130 @@ type AllowedCollectionMessage =
     | RescueNft
     | GetRoyaltyParams
     | ConfirmParentHandoff
+    | RetryParentReturn
+    | ConfirmMint
 
-fun emptyReserved(): map<uint256, ()> {
-    val m: map<uint256, ()> = [];
-    return m;
+fun defaultPolicyState(): CollectionPolicyState {
+    return {
+        accessMode: ACCESS_PUBLIC,
+        withdrawableRevenue: 0,
+        allowlist: [],
+        pendingMints: [],
+        parentGeneration: 0,
+        pendingParentReturn: null,
+    };
 }
 
 fun assertAdmin(senderAddress: address, admin: address) {
     assert (senderAddress == admin) throw ERROR_NOT_ADMIN;
+}
+
+fun isValidAccessMode(accessMode: uint8): bool {
+    return accessMode == ACCESS_PUBLIC || accessMode == ACCESS_ALLOWLIST ||
+    accessMode == ACCESS_ADMIN_ONLY;
+}
+
+fun resolveMintAccess(
+    policy: CollectionPolicyState,
+    admin: address,
+    minter: address,
+): bool {
+    if (minter == admin) {
+        return true;
+    }
+    return policy.accessMode == ACCESS_PUBLIC ||
+    (policy.accessMode == ACCESS_ALLOWLIST && policy.allowlist.exists(minter));
+}
+
+fun calculateWithdrawAmount(
+    requested: coins,
+    withdrawableRevenue: coins,
+    inboundValue: coins,
+): coins {
+    var physical = contract.getOriginalBalance() - inboundValue - COLLECTION_MIN_BALANCE -
+    FWD_FEE_RESERVE;
+    if (physical < 0) {
+        physical = 0;
+    }
+    var available = withdrawableRevenue;
+    if (available > physical) {
+        available = physical;
+    }
+    if (requested == 0 || requested > available) {
+        return available;
+    }
+    return requested;
+}
+
+fun sendRevenuePayout(recipient: address, amount: coins) {
+    if (amount == 0) {
+        return;
+    }
+    val payout = createMessage({
+        bounce: BounceMode.NoBounce,
+        dest: recipient,
+        value: amount,
+        body: beginCell().endCell(),
+    });
+    payout.send(SEND_MODE_PAY_FEES_SEPARATELY);
+}
+
+fun parseLinkedParentAction(payload: TransferForwardPayload): LinkedParentAction? {
+    var p = payload;
+    try {
+        val payloadInRef = p.loadBool();
+        if (!payloadInRef) {
+            return LinkedParentAction.fromSlice(p);
+        }
+        if (p.remainingBitsCount() != 0 || p.remainingRefsCount() != 1) {
+            return null;
+        }
+        return LinkedParentAction.fromCell(p.loadRef());
+    } catch {
+        return null;
+    }
+}
+
+fun sendPendingParentReturn(parent: address, pending: PendingParentReturn) {
+    val returnParent = createMessage({
+        bounce: BounceMode.RichBounce,
+        dest: parent,
+        value: 0,
+        body: TransferOwnership {
+            queryId: pending.returnQueryId,
+            transferData: {
+                newOwnerAddress: pending.recipient,
+                responseDestination: contract.getAddress(),
+                customPayload: null,
+                forwardAmount: 0,
+                forwardPayload: beginCell().endCell().beginParse(),
+            },
+        },
+    });
+    returnParent.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+}
+
+fun beginParentReturn(
+    mutate storage: CollectionStorage,
+    requestQueryId: uint64,
+    recipient: address,
+    inValue: coins,
+) {
+    var policy = storage.policy.load();
+    policy.parentGeneration += 1;
+    val canReturn = inValue >= MIN_PARENT_RETURN_VALUE;
+    val pending: PendingParentReturn = {
+        returnQueryId: policy.parentGeneration,
+        requestQueryId,
+        recipient,
+        inFlight: canReturn,
+    };
+    policy.pendingParentReturn = pending.toCell();
+    storage.policy = policy.toCell();
+    storage.save();
+    if (canReturn) {
+        sendPendingParentReturn(storage.parentDomain, pending);
+    }
 }
 
 fun sendParentHeartbeat(parent: address, amount: coins) {
@@ -112,7 +232,120 @@ fun notifyParentHandoffComplete(
     complete.send(SEND_MODE_PAY_FEES_SEPARATELY);
 }
 
-// Rich bounce authenticates a failed item init and releases its label.
+fun finalizePendingMint(
+    mutate storage: CollectionStorage,
+    index: uint256,
+    queryId: uint64,
+    minter: address,
+): bool {
+    var policy = storage.policy.load();
+    if (!policy.pendingMints.exists(index)) {
+        return false;
+    }
+    val pending = policy.pendingMints.mustGet(index).load();
+    if (pending.queryId != queryId || pending.minter != minter) {
+        return false;
+    }
+    policy.pendingMints.delete(index);
+    policy.withdrawableRevenue += pending.price;
+    var names = storage.names.load();
+    names.minted.set(index, ());
+    names.mintedCount += 1;
+    storage.names = names.toCell();
+    storage.policy = policy.toCell();
+    storage.save();
+    return true;
+}
+
+fun processRegistration(
+    senderAddress: address,
+    inValue: coins,
+    mutate storage: CollectionStorage,
+    queryId: uint64,
+    labelCell: Cell<RemainingBitsAndRefs>,
+    setWalletToMinter: bool,
+    initialRecords: Cell<DnsRecords>?,
+) {
+    senderAddress.forceBasechain();
+
+    val label = labelCell.load();
+    val len = label.remainingBitsCount();
+    val cfg = storage.meta.load().priceConfig.load();
+    assert (len >= cfg.minChars * BYTE_SIZE) throw ERROR_LABEL_TOO_SHORT;
+    assert (len <= MAX_DOMAIN_SIZE * BYTE_SIZE) throw ERROR_LABEL_TOO_LONG;
+    assert (len % BYTE_SIZE == 0) throw ERROR_LABEL_INVALID_CHARS;
+    assert (checkDomainString(label, len)) throw ERROR_LABEL_INVALID_CHARS;
+    assert (label.remainingRefsCount() == 0) throw ERROR_LABEL_INVALID_CHARS;
+
+    if (initialRecords != null) {
+        val _validatedRecords = initialRecords.load();
+    }
+
+    val index = label.hash();
+    var policy = storage.policy.load();
+    val names = storage.names.load();
+    assert (!names.minted.exists(index)) throw ERROR_LABEL_TAKEN;
+    assert (!policy.pendingMints.exists(index)) throw ERROR_LABEL_TAKEN;
+
+    if (names.reserved.exists(index) && senderAddress != storage.admin) {
+        throw ERROR_LABEL_RESERVED;
+    }
+
+    val price = cfg.priceForCharCount(len / BYTE_SIZE);
+    val allowed = resolveMintAccess(policy, storage.admin, senderAddress);
+    assert (allowed) throw ERROR_MINT_NOT_ALLOWED;
+    assert (
+        inValue >= price + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
+    ) throw ERROR_INSUFFICIENT_MINT_VALUE;
+
+    policy
+        .pendingMints
+        .set(
+            index,
+            PendingMint {
+                queryId,
+                minter: senderAddress,
+                price,
+            }.toCell(),
+        );
+    storage.policy = policy.toCell();
+
+    val itemCode = subdomainItemCompiledCode();
+    val deployMsg = createMessage({
+        bounce: BounceMode.RichBounce,
+        dest: calcDeployedItem(index, itemCode),
+        value: ITEM_DEPLOY_COST,
+        body: SubdomainInit {
+            queryId,
+            index,
+            minter: senderAddress,
+            label: labelCell,
+            setWalletToMinter,
+            initialRecords,
+        },
+    });
+    deployMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
+
+    val nowTime = blockchain.now();
+    if (!storage.isLinked && nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL) {
+        sendParentHeartbeat(storage.parentDomain, PARENT_HEARTBEAT_AMOUNT);
+        storage.lastParentFillUp = nowTime;
+    }
+    storage.save();
+
+    val refund = inValue - price - ITEM_DEPLOY_COST - MINT_FEE_BUFFER;
+    if (refund > 0) {
+        val refundMsg = createMessage({
+            body: Excesses { queryId },
+            bounce: BounceMode.NoBounce,
+            dest: senderAddress,
+            value: refund,
+        });
+        refundMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
+    }
+}
+
+// Rich bounces authenticate failed item initialization.
 fun onBouncedMessage(in: InMessageBounced) {
     if (in.bouncedBody.remainingBitsCount() < 32 || in.bouncedBody.preloadUint(32) != 0xfffffffe) {
         return;
@@ -120,7 +353,80 @@ fun onBouncedMessage(in: InMessageBounced) {
 
     val rich = lazy RichBounceBody.fromSlice(in.bouncedBody);
     val originalBody = rich.originalBody.beginParse();
-    if (originalBody.remainingBitsCount() < 32 || originalBody.preloadUint(32) != 0x2428aaa6) {
+    if (originalBody.remainingBitsCount() < 32) {
+        return;
+    }
+
+    if (originalBody.preloadUint(32) == 0x5fcc3d14) {
+        val loader = startLoadingCollection();
+        if (!loader.isLocked()) {
+            return;
+        }
+        var storage = loader.parseLocked();
+        if (in.senderAddress != storage.parentDomain) {
+            return;
+        }
+
+        var transfer: TransferOwnership? = null;
+        try {
+            transfer = TransferOwnership.fromSlice(originalBody);
+        } catch {
+            return;
+        }
+        val returned = transfer!;
+
+        if (storage.isLinked) {
+            var policy = storage.policy.load();
+            if (policy.pendingParentReturn == null) {
+                return;
+            }
+            var pending = policy.pendingParentReturn!.load();
+            if (
+                !pending.inFlight || returned.queryId != pending.returnQueryId ||
+                returned.transferData.newOwnerAddress != pending.recipient ||
+                returned.transferData.responseDestination == null ||
+                returned.transferData.responseDestination! != contract.getAddress() ||
+                returned.transferData.customPayload != null ||
+                returned.transferData.forwardAmount != 0 ||
+                !returned.transferData.forwardPayload.isEmpty()
+            ) {
+                return;
+            }
+            pending.inFlight = false;
+            policy.pendingParentReturn = pending.toCell();
+            storage.policy = policy.toCell();
+            storage.save();
+            return;
+        }
+
+        var origin = storage.origin.load();
+        if (origin.lastFactoryHandoff == null) {
+            return;
+        }
+        var receipt = origin.lastFactoryHandoff!.load();
+        val handoff = parseFactoryHandoffPayload(returned.transferData.forwardPayload);
+        if (
+            !receipt.returnRequired || !receipt.returnInFlight || handoff == null ||
+            returned.queryId != receipt.deploymentId ||
+            returned.transferData.newOwnerAddress != receipt.intendedAdmin ||
+            returned.transferData.responseDestination == null ||
+            returned.transferData.responseDestination! != storage.master ||
+            returned.transferData.customPayload != null ||
+            returned.transferData.forwardAmount != 0 ||
+            handoff!.deploymentId != receipt.deploymentId ||
+            handoff!.requestQueryId != receipt.requestQueryId ||
+            handoff!.intendedAdmin != receipt.intendedAdmin
+        ) {
+            return;
+        }
+        receipt.returnInFlight = false;
+        origin.lastFactoryHandoff = receipt.toCell();
+        storage.origin = origin.toCell();
+        storage.save();
+        return;
+    }
+
+    if (originalBody.preloadUint(32) != 0x2428aaa6) {
         return;
     }
 
@@ -136,22 +442,22 @@ fun onBouncedMessage(in: InMessageBounced) {
     ) throw ERROR_NOT_FROM_COLLECTION;
     assert (init.label.load().hash() == init.index) throw ERROR_INDEX_MISMATCH;
 
-    if (!storage.minted.exists(init.index)) {
+    var policy = storage.policy.load();
+    if (!policy.pendingMints.exists(init.index)) {
         return;
     }
-    storage.minted.delete(init.index);
-    // The set is authoritative; saturate its auxiliary count.
-    if (storage.mintedCount > 0) {
-        storage.mintedCount -= 1;
+    val pending = policy.pendingMints.mustGet(init.index).load();
+    if (pending.queryId != init.queryId || pending.minter != init.minter) {
+        return;
     }
+    policy.pendingMints.delete(init.index);
+    storage.policy = policy.toCell();
     storage.save();
 
-    val labelBits = init.label.load().remainingBitsCount();
-    val price = storage.meta.load().priceConfig.load().priceForCharCount(labelBits / BYTE_SIZE);
     val refund = createMessage({
         bounce: BounceMode.NoBounce,
         dest: init.minter,
-        value: price + in.valueCoins,
+        value: pending.price + in.valueCoins,
         body: Excesses { queryId: init.queryId },
     });
     refund.send(SEND_MODE_PAY_FEES_SEPARATELY);
@@ -194,9 +500,12 @@ fun onInternalMessage(in: InMessage) {
             isLinked: sk.isLinked,
             lastParentFillUp: blockchain.now(),
             meta: lock.meta,
-            reserved: emptyReserved(),
-            minted: emptyReserved(),
-            mintedCount: 0,
+            names: CollectionNames {
+                reserved: [],
+                minted: [],
+                mintedCount: 0,
+            }.toCell(),
+            policy: defaultPolicyState().toCell(),
         };
         locked.save();
         notifyFactory(
@@ -220,29 +529,73 @@ fun onInternalMessage(in: InMessage) {
     }
 
     if (in.body.remainingBitsCount() >= 32 && in.body.preloadUint(32) == 0x05138d91) {
-        // Parent landing either completes Locked creation or terminally upgrades Linked.
+        // The canonical parent is the only trust anchor for both Locked handoff and Linked claims.
         if (in.senderAddress == storage.parentDomain) {
             val assigned = lazy OwnershipAssigned.fromSlice(in.body);
-            var factoryReceipt: FactoryHandoffReceipt? = null;
-            var handoffPayload = assigned.payload;
-            if (handoffPayload.remainingBitsCount() > 0) {
-                val payloadInRef = handoffPayload.loadBool();
-                if (payloadInRef && handoffPayload.remainingRefsCount() > 0) {
-                    handoffPayload = handoffPayload.loadRef().beginParse();
+
+            if (storage.isLinked) {
+                assert (assigned.oldOwnerAddress != null) throw ERROR_NULL_OLD_OWNER;
+                val claimant = assigned.oldOwnerAddress!;
+                val parsedAction = parseLinkedParentAction(assigned.payload);
+                if (parsedAction == null) {
+                    beginParentReturn(
+                        mutate storage,
+                        assigned.queryId,
+                        claimant,
+                        in.valueCoins,
+                    );
+                    return;
                 }
+                val action = parsedAction!;
+
+                if (action.action == LINKED_ACTION_CONVERT_LOCKED) {
+                    var policy = storage.policy.load();
+                    policy.pendingParentReturn = null;
+                    storage.admin = claimant;
+                    storage.isLinked = false;
+                    storage.policy = policy.toCell();
+                    storage.save();
+                    pinNextResolver(
+                        storage.parentDomain,
+                        assigned.queryId,
+                        SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_IGNORE_ERRORS,
+                    );
+                    return;
+                }
+
+                if (action.action != LINKED_ACTION_CLAIM) {
+                    beginParentReturn(
+                        mutate storage,
+                        assigned.queryId,
+                        claimant,
+                        in.valueCoins,
+                    );
+                    return;
+                }
+
+                storage.admin = claimant;
+                var policy = storage.policy.load();
+                val amount = calculateWithdrawAmount(0, policy.withdrawableRevenue, in.valueCoins);
+                policy.withdrawableRevenue -= amount;
+                storage.policy = policy.toCell();
+                sendRevenuePayout(claimant, amount);
+                beginParentReturn(mutate storage, assigned.queryId, claimant, in.valueCoins);
+                return;
             }
+
+            var factoryReceipt: FactoryHandoffReceipt? = null;
+            val handoff = parseFactoryHandoffPayload(assigned.payload);
             if (
                 assigned.oldOwnerAddress != null && assigned.oldOwnerAddress! == storage.master &&
-                handoffPayload.remainingBitsCount() >= 32 &&
-                handoffPayload.preloadUint(32) == 0x48414e44
+                handoff != null
             ) {
-                val handoff = FactoryHandoff.fromSlice(handoffPayload);
-                assert (handoff.deploymentId == assigned.queryId) throw ERROR_NOT_FROM_MASTER;
+                assert (handoff!.deploymentId == assigned.queryId) throw ERROR_NOT_FROM_MASTER;
                 factoryReceipt = FactoryHandoffReceipt {
-                    deploymentId: handoff.deploymentId,
-                    requestQueryId: handoff.requestQueryId,
-                    intendedAdmin: handoff.intendedAdmin,
-                    returnRequired: handoff.intendedAdmin != storage.admin,
+                    deploymentId: handoff!.deploymentId,
+                    requestQueryId: handoff!.requestQueryId,
+                    intendedAdmin: handoff!.intendedAdmin,
+                    returnRequired: handoff!.intendedAdmin != storage.admin,
+                    returnInFlight: handoff!.intendedAdmin != storage.admin,
                 };
                 var updatedOrigin = storage.origin.load();
                 updatedOrigin.lastFactoryHandoff = factoryReceipt!.toCell();
@@ -281,10 +634,6 @@ fun onInternalMessage(in: InMessage) {
                 returnParent.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
                 return;
             }
-            if (storage.isLinked) {
-                storage.isLinked = false;
-                storage.save();
-            }
             // Commit custody even if the resolver pin must be repaired later.
             pinNextResolver(
                 storage.parentDomain,
@@ -299,6 +648,24 @@ fun onInternalMessage(in: InMessage) {
     }
 
     if (in.body.remainingBitsCount() >= 32 && in.body.preloadUint(32) == 0xd53276db) {
+        val acknowledgement = lazy Excesses.fromSlice(in.body);
+        var policy = storage.policy.load();
+        if (
+            in.senderAddress == storage.parentDomain && policy.pendingParentReturn != null &&
+            policy.pendingParentReturn!.load().returnQueryId == acknowledgement.queryId
+        ) {
+            val pending = policy.pendingParentReturn!.load();
+            policy.pendingParentReturn = null;
+            storage.policy = policy.toCell();
+            storage.save();
+            val refund = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: pending.recipient,
+                value: 0,
+                body: Excesses { queryId: pending.requestQueryId },
+            });
+            refund.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        }
         return;
     }
 
@@ -334,76 +701,42 @@ fun onInternalMessage(in: InMessage) {
     match (msg) {
         // ---------------- MINT ----------------
         RegisterSubdomain => {
-            // Reject before reserving a label the basechain item cannot use.
-            in.senderAddress.forceBasechain();
+            processRegistration(
+                in.senderAddress,
+                in.valueCoins,
+                mutate storage,
+                msg.queryId,
+                msg.label,
+                msg.setWalletToMinter,
+                msg.initialRecords,
+            );
+        }
 
-            val label = msg.label.load();
-            val len = label.remainingBitsCount();
-            val cfg = storage.meta.load().priceConfig.load();
-            assert (
-                len >= cfg.minChars * BYTE_SIZE
-            ) throw ERROR_LABEL_TOO_SHORT;                                        // per-registry minimum
-            assert (len <= MAX_DOMAIN_SIZE * BYTE_SIZE) throw ERROR_LABEL_TOO_LONG;
-            assert (len % BYTE_SIZE == 0) throw ERROR_LABEL_INVALID_CHARS;
-            assert (checkDomainString(label, len)) throw ERROR_LABEL_INVALID_CHARS;
-            assert (label.remainingRefsCount() == 0) throw ERROR_LABEL_INVALID_CHARS;
-
-            // Validate records before reserving the label.
-            if (msg.initialRecords != null) {
-                val _validatedRecords = msg.initialRecords.load();
-            }
-
-            val index = label.hash();
-            assert (!storage.minted.exists(index)) throw ERROR_LABEL_TAKEN;
-
-            if (storage.reserved.exists(index) && in.senderAddress != storage.admin) {
-                throw ERROR_LABEL_RESERVED;
-            }
-
-            val price = cfg.priceForCharCount(len / BYTE_SIZE);
-            assert (
-                in.valueCoins >= price + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
-            ) throw ERROR_INSUFFICIENT_MINT_VALUE;
-
+        ItemReady => {
             val itemCode = subdomainItemCompiledCode();
-            val deployMsg = createMessage({
-                bounce: BounceMode.RichBounce,
-                dest: calcDeployedItem(index, itemCode),
-                value: ITEM_DEPLOY_COST,
-                body: SubdomainInit {
-                    queryId: msg.queryId,
-                    index,
-                    minter: in.senderAddress,
-                    label: msg.label,
-                    setWalletToMinter: msg.setWalletToMinter,
-                    initialRecords: msg.initialRecords,
-                },
-            });
-            deployMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
+            assert (
+                in.senderAddress == calcDeployedItem(msg.index, itemCode).calculateAddress()
+            ) throw ERROR_NOT_FROM_COLLECTION;
+            finalizePendingMint(mutate storage, msg.index, msg.queryId, msg.minter);
+        }
 
-            storage.minted.set(index, ());
-            storage.mintedCount += 1;
-
-            // Only a Locked collection owns the parent and can renew it.
-            val nowTime = blockchain.now();
-            if (
-                !storage.isLinked && nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL
-            ) {
-                sendParentHeartbeat(storage.parentDomain, PARENT_HEARTBEAT_AMOUNT);
-                storage.lastParentFillUp = nowTime;
+        ReportStaticData => {
+            val itemCode = subdomainItemCompiledCode();
+            assert (
+                in.senderAddress == calcDeployedItem(msg.itemIndex, itemCode).calculateAddress()
+            ) throw ERROR_NOT_FROM_COLLECTION;
+            assert (msg.collectionAddress == contract.getAddress()) throw ERROR_NOT_FROM_COLLECTION;
+            val policy = storage.policy.load();
+            if (!policy.pendingMints.exists(msg.itemIndex)) {
+                return;
             }
-            storage.save();
-
-            val refund = in.valueCoins - price - ITEM_DEPLOY_COST - MINT_FEE_BUFFER;
-            if (refund > 0) {
-                val refundMsg = createMessage({
-                    body: Excesses { queryId: msg.queryId },
-                    bounce: false,
-                    dest: in.senderAddress,
-                    value: refund,
-                });
-                refundMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
-            }
+            val pending = policy.pendingMints.mustGet(msg.itemIndex).load();
+            finalizePendingMint(
+                mutate storage,
+                msg.itemIndex,
+                pending.queryId,
+                pending.minter,
+            );
         }
 
         // ---------------- admin: set content ----------------
@@ -415,32 +748,47 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
         }
 
+        SetAccessMode => {
+            assertAdmin(in.senderAddress, storage.admin);
+            assert (isValidAccessMode(msg.accessMode)) throw ERROR_INVALID_ACCESS_MODE;
+            var policy = storage.policy.load();
+            policy.accessMode = msg.accessMode;
+            storage.policy = policy.toCell();
+            storage.save();
+        }
+
+        SetAllowlistEntry => {
+            assertAdmin(in.senderAddress, storage.admin);
+            msg.wallet.forceBasechain();
+            var policy = storage.policy.load();
+            if (msg.allowed) {
+                policy.allowlist.set(msg.wallet, ());
+            } else {
+                policy.allowlist.delete(msg.wallet);
+            }
+            storage.policy = policy.toCell();
+            storage.save();
+        }
+
         WithdrawFees => {
             assertAdmin(in.senderAddress, storage.admin);
-            val balance = contract.getOriginalBalance();
-            val keep = COLLECTION_MIN_BALANCE + FWD_FEE_RESERVE;
-            var maxWithdraw = balance - in.valueCoins - keep;
-            if (maxWithdraw < 0) {
-                maxWithdraw = 0;
-            }
-            var amount = msg.amount;
-            if (amount == 0 || amount > maxWithdraw) {
-                amount = maxWithdraw;
-            }
-            if (amount > 0) {
-                val payout = createMessage({
-                    bounce: false,
-                    dest: storage.admin,
-                    value: amount,
-                    body: beginCell().endCell(),
-                });
-                payout.send(SEND_MODE_PAY_FEES_SEPARATELY);
-            }
+            assert (!storage.isLinked) throw ERROR_LINKED_OWNER_PROOF_REQUIRED;
+            var policy = storage.policy.load();
+            val amount = calculateWithdrawAmount(
+                msg.amount,
+                policy.withdrawableRevenue,
+                in.valueCoins,
+            );
+            policy.withdrawableRevenue -= amount;
+            storage.policy = policy.toCell();
+            storage.save();
+            sendRevenuePayout(storage.admin, amount);
         }
 
         // ---------------- admin: transfer role ----------------
         TransferAdmin => {
             assertAdmin(in.senderAddress, storage.admin);
+            assert (!storage.isLinked) throw ERROR_LINKED_OWNER_PROOF_REQUIRED;
             // An unusable admin would permanently lock privileged operations.
             msg.newAdmin.forceBasechain();
             val prev = storage.admin;
@@ -506,21 +854,21 @@ fun onInternalMessage(in: InMessage) {
 
         SetLabelReserved => {
             assertAdmin(in.senderAddress, storage.admin);
+            var names = storage.names.load();
             if (msg.reserved) {
-                storage.reserved.set(msg.labelHash, ());
+                names.reserved.set(msg.labelHash, ());
             } else {
-                storage.reserved.delete(msg.labelHash);
+                names.reserved.delete(msg.labelHash);
             }
+            storage.names = names.toCell();
             storage.save();
         }
 
         // ---------------- admin: rescue NFT ----------------
         RescueNft => {
             assertAdmin(in.senderAddress, storage.admin);
-            // Locked protects parent custody; Linked allows rescue of a mis-routed parent.
-            assert (
-                storage.isLinked || msg.nftAddress != storage.parentDomain
-            ) throw ERROR_RESCUE_PARENT_FORBIDDEN;
+            // The cached Linked admin is not proof of current parent ownership.
+            assert (msg.nftAddress != storage.parentDomain) throw ERROR_RESCUE_PARENT_FORBIDDEN;
             val emptyPayload = beginCell().endCell().beginParse();
             val rescueMsg = createMessage({
                 bounce: true,
@@ -559,11 +907,11 @@ fun onInternalMessage(in: InMessage) {
         ConfirmParentHandoff => {
             assert (in.senderAddress == storage.master) throw ERROR_NOT_FROM_MASTER;
             assert (msg.parentDomain == storage.parentDomain) throw ERROR_NOT_FROM_MASTER;
-            val origin = storage.origin.load();
+            var origin = storage.origin.load();
             if (origin.lastFactoryHandoff == null) {
                 return;
             }
-            val receipt = origin.lastFactoryHandoff!.load();
+            var receipt = origin.lastFactoryHandoff!.load();
             if (
                 receipt.deploymentId != msg.deploymentId || receipt.requestQueryId != msg.queryId ||
                 receipt.intendedAdmin != msg.intendedAdmin
@@ -575,6 +923,15 @@ fun onInternalMessage(in: InMessage) {
                 notifyParentHandoffComplete(storage.master, storage.parentDomain, receipt);
                 return;
             }
+
+            if (receipt.returnInFlight) {
+                return;
+            }
+
+            receipt.returnInFlight = true;
+            origin.lastFactoryHandoff = receipt.toCell();
+            storage.origin = origin.toCell();
+            storage.save();
 
             // Recover an interrupted return after TransferAdmin raced the handoff.
             val returnParent = createMessage({
@@ -603,6 +960,34 @@ fun onInternalMessage(in: InMessage) {
                 },
             });
             returnParent.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        }
+
+        RetryParentReturn => {
+            var policy = storage.policy.load();
+            assert (storage.isLinked) throw ERROR_LINKED_NO_CUSTODY;
+            assert (policy.pendingParentReturn != null) throw ERROR_NO_PARENT_RETURN;
+            var pending = policy.pendingParentReturn!.load();
+            assert (!pending.inFlight) throw ERROR_PARENT_TRANSFER_IN_FLIGHT;
+            assert (in.valueCoins >= MIN_PARENT_RETURN_VALUE) throw ERROR_INSUFFICIENT_BALANCE;
+            pending.inFlight = true;
+            policy.pendingParentReturn = pending.toCell();
+            storage.policy = policy.toCell();
+            storage.save();
+            sendPendingParentReturn(storage.parentDomain, pending);
+        }
+
+        ConfirmMint => {
+            val policy = storage.policy.load();
+            assert (policy.pendingMints.exists(msg.index)) throw ERROR_MINT_NOT_PENDING;
+            assert (in.valueCoins >= MIN_CONFIRM_MINT_VALUE) throw ERROR_INSUFFICIENT_BALANCE;
+            val item = calcDeployedItem(msg.index, subdomainItemCompiledCode()).calculateAddress();
+            val probe = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: item,
+                value: 0,
+                body: GetStaticData { queryId: msg.queryId },
+            });
+            probe.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
 
         else => throw ERROR_UNKNOWN_OP,
@@ -653,7 +1038,15 @@ get fun get_minted_count(): int {
     if (!loader.isLocked()) {
         return 0;
     }
-    return loader.parseLocked().mintedCount;
+    return loader.parseLocked().names.load().mintedCount;
+}
+
+get fun get_is_mint_pending(index: uint256): bool {
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return false;
+    }
+    return loader.parseLocked().policy.load().pendingMints.exists(index);
 }
 
 get fun get_nft_content(_index: int, individualContent: cell): cell {
@@ -671,6 +1064,83 @@ get fun get_price(charCount: int): coins {
         return 0;
     }
     return loader.parseLocked().meta.load().priceConfig.load().priceForCharCount(charCount);
+}
+
+get fun get_access_mode(): int {
+    val loader = startLoadingCollection();
+    return loader.isLocked() ? loader.parseLocked().policy.load().accessMode : ACCESS_PUBLIC;
+}
+
+get fun get_withdrawable_revenue(): coins {
+    val loader = startLoadingCollection();
+    return loader.isLocked() ? loader.parseLocked().policy.load().withdrawableRevenue : 0;
+}
+
+get fun get_is_allowlisted(wallet: address): bool {
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return false;
+    }
+    return loader.parseLocked().policy.load().allowlist.exists(wallet);
+}
+
+get fun get_mint_quote(wallet: address, charCount: int): MintQuoteReply {
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return {
+            allowed: false,
+            effectivePrice: 0,
+            requiredValue: 0,
+        };
+    }
+    val storage = loader.parseLocked();
+    val policy = storage.policy.load();
+    val config = storage.meta.load().priceConfig.load();
+    if (charCount < config.minChars || charCount > MAX_DOMAIN_SIZE) {
+        return {
+            allowed: false,
+            effectivePrice: 0,
+            requiredValue: 0,
+        };
+    }
+    val effectivePrice = config.priceForCharCount(charCount);
+    val allowed = resolveMintAccess(policy, storage.admin, wallet);
+    return {
+        allowed,
+        effectivePrice,
+        requiredValue: effectivePrice + ITEM_DEPLOY_COST + MINT_FEE_BUFFER,
+    };
+}
+
+get fun get_parent_return(): ParentReturnReply {
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return {
+            pending: false,
+            returnQueryId: 0,
+            requestQueryId: 0,
+            recipient: null,
+            inFlight: false,
+        };
+    }
+    val pendingCell = loader.parseLocked().policy.load().pendingParentReturn;
+    if (pendingCell == null) {
+        return {
+            pending: false,
+            returnQueryId: 0,
+            requestQueryId: 0,
+            recipient: null,
+            inFlight: false,
+        };
+    }
+    val pending = pendingCell!.load();
+    return {
+        pending: true,
+        returnQueryId: pending.returnQueryId,
+        requestQueryId: pending.requestQueryId,
+        recipient: pending.recipient,
+        inFlight: pending.inFlight,
+    };
 }
 
 // the registry's chosen minimum subdomain length (1..4); 0 if not locked

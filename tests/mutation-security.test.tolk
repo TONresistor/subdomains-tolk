@@ -88,9 +88,15 @@ fun deployInitializedCollection(
         isLinked: false,
         lastParentFillUp: blockchain.now(),
         meta: makeMeta().toCell(),
-        reserved,
-        minted,
-        mintedCount,
+        names: CollectionNames { reserved, minted, mintedCount }.toCell(),
+        policy: CollectionPolicyState {
+            accessMode: ACCESS_PUBLIC,
+            withdrawableRevenue: 0,
+            allowlist: [],
+            pendingMints: [],
+            parentGeneration: 0,
+            pendingParentReturn: null,
+        }.toCell(),
     };
     val stateInit: ContractState = { code: build("SubdomainCollection"), data: storage.toCell() };
     val collection = SubdomainCollection {
@@ -104,11 +110,11 @@ fun deployInitializedCollection(
     return collection;
 }
 
-get fun `test mutation: factory rejects a forged current-generation transfer bounce`() {
+get fun `test mutation: factory ignores a forged current-generation transfer bounce`() {
     val owner = newActor("mutation-bounce-owner");
     val attacker = newActor("mutation-bounce-attacker");
     val parent = newActor("mutation-bounce-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val create = createMessage({
@@ -152,14 +158,156 @@ get fun `test mutation: factory rejects a forged current-generation transfer bou
     }).bounced();
     val result = net.send(parent.address, bounced);
 
-    expect(result).toHaveFailedTx({ to: factory.address, exitCode: ERROR_NOT_FROM_COLLECTION });
+    expect(result).toHaveSuccessfulTx({ to: factory.address });
+    expect(result.findTransaction<Excesses>({ from: factory.address })).toEqual(null);
+}
+
+get fun `test mutation: rejected custody authenticates bounce, ack and retry`() {
+    val owner = newActor("mutation-rejected-owner");
+    val attacker = newActor("mutation-rejected-attacker");
+    val parent = newActor("mutation-rejected-parent");
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
+    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+
+    val rejected = testing.processSingleTraceStep(
+        parent.address,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: ton("1"),
+            body: OwnershipAssigned {
+                queryId: 150,
+                oldOwnerAddress: owner.address,
+                payload: beginCell()
+                    .storeRef(beginCell().storeUint(1, 1).endCell())
+                    .endCell()
+                    .beginParse(),
+            },
+        }),
+    );
+    val returned = rejected.outMessages.at<TransferOwnership>(0);
+    val returnBody = returned.loadBody();
+
+    var forgedCurrent = returnBody;
+    forgedCurrent.transferData.forwardPayload = beginCell()
+        .storeBool(true)
+        .storeRef(
+            FactoryHandoff {
+                deploymentId: returnBody.queryId,
+                requestQueryId: 150,
+                intendedAdmin: attacker.address,
+            }.toCell(),
+        )
+        .endCell()
+        .beginParse();
+    val forgedBounce = net.send(
+        parent.address,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: ton("0.1"),
+            body: mutationRichBounce(forgedCurrent.toCell(), returned.info.value.grams),
+        }).bounced(),
+    );
+    expect(forgedBounce).toHaveSuccessfulTx({ to: factory.address });
+    expect(forgedBounce.findTransaction<Excesses>({ from: factory.address })).toEqual(null);
+
+    var oldGeneration = forgedCurrent;
+    oldGeneration.transferData.forwardPayload = beginCell()
+        .storeBool(true)
+        .storeRef(
+            FactoryHandoff {
+                deploymentId: returnBody.queryId + 1,
+                requestQueryId: 151,
+                intendedAdmin: attacker.address,
+            }.toCell(),
+        )
+        .endCell()
+        .beginParse();
+    val oldBounce = net.send(
+        parent.address,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: ton("0.1"),
+            body: mutationRichBounce(oldGeneration.toCell(), returned.info.value.grams),
+        }).bounced(),
+    );
+    expect(oldBounce).toHaveSuccessfulTx({ to: factory.address });
+    expect(oldBounce.findTransaction<Excesses>({ from: factory.address })).toEqual(null);
+
+    val wrongAck = factory.sendAny(
+        parent.address,
+        Excesses { queryId: returnBody.queryId + 1 }.toCell(),
+        { value: ton("0.01"), bounce: false },
+    );
+    expect(wrongAck).toHaveFailedTx({
+        to: factory.address,
+        exitCode: ERROR_NOT_FROM_COLLECTION,
+    });
+
+    val collectionAddress = factory.getCollectionAddress(parent.address);
+    val duplicateRetry = factory.sendRetryCollectionDeployment(
+        owner.address,
+        151,
+        collectionAddress,
+        { value: ton("0.5"), bounce: true },
+    );
+    expect(duplicateRetry).toHaveFailedTx({
+        to: factory.address,
+        exitCode: ERROR_PARENT_TRANSFER_IN_FLIGHT,
+    });
+
+    val validBounce = net.send(
+        parent.address,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: ton("0.1"),
+            body: mutationRichBounce(returnBody.toCell(), returned.info.value.grams),
+        }).bounced(),
+    );
+    expect(validBounce).toHaveSuccessfulTx({ to: factory.address });
+    expect(
+        validBounce.findTransaction<Excesses>({ from: factory.address, to: owner.address }),
+    ).toBeNotNull();
+
+    val unauthorized = factory.sendRetryCollectionDeployment(
+        attacker.address,
+        152,
+        collectionAddress,
+        { value: ton("0.5"), bounce: true },
+    );
+    expect(unauthorized).toHaveFailedTx({ to: factory.address, exitCode: ERROR_NOT_ADMIN });
+
+    val underfunded = factory.sendRetryCollectionDeployment(
+        owner.address,
+        153,
+        collectionAddress,
+        { value: ton("0.5") - 1, bounce: true },
+    );
+    expect(underfunded).toHaveFailedTx({
+        to: factory.address,
+        exitCode: ERROR_INSUFFICIENT_BALANCE,
+    });
+
+    val retry = factory.sendRetryCollectionDeployment(
+        owner.address,
+        154,
+        collectionAddress,
+        { value: ton("0.5"), bounce: true },
+    );
+    expect(retry).toHaveSuccessfulTx({ to: factory.address });
+    expect(
+        retry.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
+    ).toBeNotNull();
 }
 
 get fun `test mutation: factory authenticates recovery phase, generation and callback`() {
     val owner = newActor("mutation-recovery-owner");
     val attacker = newActor("mutation-recovery-attacker");
     val parent = newActor("mutation-recovery-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val create = createMessage({
@@ -393,7 +541,7 @@ get fun `test mutation: item transfer reserves every required forward fee`() {
 get fun `test mutation: factory ignores malformed and unrelated bounces`() {
     val caller = newActor("mutation-malformed-caller");
     val nextOwner = newActor("mutation-malformed-owner");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(caller.address, { value: ton("1"), bounce: false });
 
     val truncated = net.send(
@@ -451,7 +599,7 @@ get fun `test mutation: factory ignores malformed and unrelated bounces`() {
 get fun `test mutation: linked deployment bounce clears persisted recovery`() {
     val owner = newActor("mutation-linked-bounce-owner");
     val parent = newActor("mutation-linked-bounce-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val request = createMessage({
@@ -498,7 +646,7 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
     val parentA = newActor("mutation-linked-refund-parent-a");
     val parentB = newActor("mutation-linked-refund-parent-b");
     val parentC = newActor("mutation-linked-refund-parent-c");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val createStep = testing.processSingleTraceStep(
@@ -586,14 +734,13 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
     expect(overpaidRetry.outMessages.at<Excesses>(1).info.value.grams).toBeLessOrEqual(ton("0.24"));
 }
 
-get fun `test mutation: old generations and duplicate custody notifications are inert`() {
-    val owner = newActor("mutation-generation-owner");
-    val attacker = newActor("mutation-generation-attacker");
-    val parent = newActor("mutation-generation-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+get fun `test mutation: stale returned custody cannot revive an old deployment`() {
+    val owner = newActor("mutation-stale-owner");
+    val parent = newActor("mutation-stale-parent");
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
-    val request = createMessage({
+    val firstRequest = createMessage({
         bounce: false,
         dest: factory.address,
         value: MIN_CREATE_VALUE,
@@ -603,73 +750,106 @@ get fun `test mutation: old generations and duplicate custody notifications are 
             payload: beginCell().storeRef(makeMeta().toCell()).endCell().beginParse(),
         },
     });
-    val createStep = testing.processSingleTraceStep(parent.address, request);
-    val lock = createStep.outMessages.at<LockCollection>(0).loadBody();
+    val firstCreate = testing.processSingleTraceStep(parent.address, firstRequest);
+    val firstLock = firstCreate.outMessages.at<LockCollection>(0).loadBody();
     val collectionAddress = factory.getCollectionAddress(parent.address);
 
-    var oldLock = lock;
-    oldLock.deploymentId += 1;
-    val oldDeployBounce = net.send(
+    val firstBounce = testing.processSingleTraceStep(
         collectionAddress,
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.24"),
-            body: mutationRichBounce(oldLock.toCell(), COLLECTION_DEPLOY_VALUE),
+            value: COLLECTION_DEPLOY_VALUE,
+            body: mutationRichBounce(firstLock.toCell(), COLLECTION_DEPLOY_VALUE),
         }).bounced(),
     );
-    expect(oldDeployBounce.findTransaction<Excesses>({ from: factory.address })).toBeNotNull();
+    expect(firstBounce.outMessages.at<TransferOwnership>(0).info.dest).toEqual(parent.address);
+
+    val secondRequest = createMessage({
+        bounce: false,
+        dest: factory.address,
+        value: MIN_CREATE_VALUE,
+        body: OwnershipAssigned {
+            queryId: 701,
+            oldOwnerAddress: owner.address,
+            payload: beginCell().storeRef(makeMeta().toCell()).endCell().beginParse(),
+        },
+    });
+    val secondCreate = testing.processSingleTraceStep(parent.address, secondRequest);
+    val secondLock = secondCreate.outMessages.at<LockCollection>(0).loadBody();
+    expect(secondLock.deploymentId == firstLock.deploymentId).toEqual(false);
+
+    val lateFirstBounce = net.send(
+        collectionAddress,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: COLLECTION_DEPLOY_VALUE,
+            body: mutationRichBounce(firstLock.toCell(), COLLECTION_DEPLOY_VALUE),
+        }).bounced(),
+    );
+    expect(lateFirstBounce).toHaveSuccessfulTx({ to: factory.address });
     expect(
-        oldDeployBounce.findTransaction<TransferOwnership>({ from: factory.address }),
+        lateFirstBounce.findTransaction<Excesses>({
+            from: factory.address,
+            to: owner.address,
+        }),
+    ).toBeNotNull();
+    expect(
+        lateFirstBounce.findTransaction<TransferOwnership>({ from: factory.address }),
     ).toEqual(null);
 
-    val oldHandoffPayload = beginCell()
-        .storeBool(true)
-        .storeRef(
-            FactoryHandoff {
-                deploymentId: lock.deploymentId + 1,
-                requestQueryId: lock.queryId,
-                intendedAdmin: attacker.address,
-            }.toCell(),
-        )
-        .endCell()
-        .beginParse();
-    val oldTransfer = TransferOwnership {
-        queryId: lock.deploymentId + 1,
-        transferData: {
-            newOwnerAddress: collectionAddress,
-            responseDestination: attacker.address,
-            customPayload: null,
-            forwardAmount: 0,
-            forwardPayload: oldHandoffPayload,
-        },
-    };
-    val oldTransferBounce = net.send(
+    val secondBounce = testing.processSingleTraceStep(
+        collectionAddress,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: COLLECTION_DEPLOY_VALUE,
+            body: mutationRichBounce(secondLock.toCell(), COLLECTION_DEPLOY_VALUE),
+        }).bounced(),
+    );
+    expect(secondBounce.outMessages.at<TransferOwnership>(0).info.dest).toEqual(parent.address);
+
+    val rejected = testing.processSingleTraceStep(
         parent.address,
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.1"),
-            body: mutationRichBounce(oldTransfer.toCell(), ton("0.1")),
-        }).bounced(),
-    );
-    expect(oldTransferBounce).toHaveSuccessfulTx({ to: factory.address });
-    expect(
-        oldTransferBounce.findTransaction<Excesses>({
-            from: factory.address,
-            to: attacker.address,
+            value: ton("1"),
+            body: OwnershipAssigned {
+                queryId: 702,
+                oldOwnerAddress: owner.address,
+                payload: beginCell()
+                    .storeRef(beginCell().storeUint(1, 1).endCell())
+                    .endCell()
+                    .beginParse(),
+            },
         }),
-    ).toBeNotNull();
+    );
+    val rejectedReturn = rejected.outMessages.at<TransferOwnership>(0).loadBody();
+    val acknowledgement = factory.sendAny(
+        parent.address,
+        Excesses { queryId: rejectedReturn.queryId }.toCell(),
+        { value: ton("0.01"), bounce: false },
+    );
+    expect(acknowledgement).toHaveSuccessfulTx({ to: factory.address });
 
-    val duplicate = testing.processSingleTraceStep(parent.address, request);
-    expect(duplicate.outMessages.size()).toEqual(1);
-    expect(duplicate.outMessages.at<Excesses>(0).loadBody().queryId).toEqual(700);
+    val retry = factory.sendRetryCollectionDeployment(
+        owner.address,
+        703,
+        collectionAddress,
+        { value: ton("0.5"), bounce: true },
+    );
+    expect(retry).toHaveFailedTx({
+        to: factory.address,
+        exitCode: ERROR_NOT_FROM_COLLECTION,
+    });
 }
 
 get fun `test mutation: collection readiness cannot skip generation or phase`() {
     val owner = newActor("mutation-ready-owner");
     val parent = newActor("mutation-ready-parent");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val request = createMessage({
@@ -735,7 +915,7 @@ get fun `test mutation: handoff completion cannot skip generation or phase`() {
     val owner = newActor("mutation-complete-owner");
     val parentA = newActor("mutation-complete-parent-a");
     val parentB = newActor("mutation-complete-parent-b");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val requestA = createMessage({
@@ -829,6 +1009,17 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
         }).bounced(),
     );
     expect(malformed).toHaveSuccessfulTx({ to: collection.address });
+
+    val emptyOriginal = net.send(
+        user.address,
+        createMessage({
+            bounce: false,
+            dest: collection.address,
+            value: ton("0.01"),
+            body: mutationRichBounce(beginCell().endCell(), ton("0.01")),
+        }).bounced(),
+    );
+    expect(emptyOriginal).toHaveSuccessfulTx({ to: collection.address });
 
     val wrongOpcode = net.send(
         user.address,
@@ -974,7 +1165,8 @@ get fun `test mutation: collection saturates mint rollback and validates handoff
 }
 
 get fun `test mutation: collection withdrawal preserves the requested amount and floor`() {
-    val (collection, _parent, owner, _user) = deployLockedCollection();
+    val (collection, _parent, owner, user) = deployLockedCollection();
+    mintSubdomain(collection, user, "withdraw", ton("5"));
     val partial = collection.sendWithdrawFees(
         owner.address,
         1100,
@@ -1081,6 +1273,65 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
     expect(
         replay.findTransaction<ParentHandoffComplete>({ from: returning.address }),
     ).toEqual(null);
+
+    val duplicate = returning.sendConfirmParentHandoff(
+        master.address,
+        receipt.deploymentId,
+        receipt.requestQueryId,
+        parent.address,
+        owner.address,
+        { value: ton("0.1"), bounce: true },
+    );
+    expect(
+        duplicate.findTransaction<TransferOwnership>({
+            from: returning.address,
+            to: parent.address,
+        }),
+    ).toEqual(null);
+
+    val failedReturn: TransferOwnership = {
+        queryId: receipt.deploymentId,
+        transferData: {
+            newOwnerAddress: receipt.intendedAdmin,
+            responseDestination: master.address,
+            customPayload: null,
+            forwardAmount: 0,
+            forwardPayload: beginCell()
+                .storeBool(true)
+                .storeRef(
+                    FactoryHandoff {
+                        deploymentId: receipt.deploymentId,
+                        requestQueryId: receipt.requestQueryId,
+                        intendedAdmin: receipt.intendedAdmin,
+                    }.toCell(),
+                )
+                .endCell()
+                .beginParse(),
+        },
+    };
+    testing.processSingleTraceStep(
+        parent.address,
+        createMessage({
+            bounce: false,
+            dest: returning.address,
+            value: ton("0.05"),
+            body: mutationRichBounce(failedReturn.toCell(), ton("0.05")),
+        }).bounced(),
+    );
+    val afterBounce = returning.sendConfirmParentHandoff(
+        master.address,
+        receipt.deploymentId,
+        receipt.requestQueryId,
+        parent.address,
+        owner.address,
+        { value: ton("0.1"), bounce: true },
+    );
+    expect(
+        afterBounce.findTransaction<TransferOwnership>({
+            from: returning.address,
+            to: parent.address,
+        }),
+    ).toBeNotNull();
 
     val completedReceipt: FactoryHandoffReceipt = {
         deploymentId: 1204,

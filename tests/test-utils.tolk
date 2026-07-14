@@ -49,6 +49,14 @@ fun emptyPayload(): RemainingBitsAndRefs {
     return beginCell().endCell().beginParse();
 }
 
+fun linkedActionPayload(action: uint8): RemainingBitsAndRefs {
+    return beginCell()
+        .storeBool(true)
+        .storeRef(LinkedParentAction { action }.toCell())
+        .endCell()
+        .beginParse();
+}
+
 fun parseNextResolverCell(data: cell): address {
     return DnsNextResolver.fromCell(data).resolver;
 }

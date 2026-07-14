@@ -123,6 +123,22 @@ struct (0x48414e44) FactoryHandoff {
     intendedAdmin: address
 }
 
+fun parseFactoryHandoffPayload(payload: TransferForwardPayload): FactoryHandoff? {
+    var p = payload;
+    try {
+        val payloadInRef = p.loadBool();
+        if (!payloadInRef) {
+            return FactoryHandoff.fromSlice(p);
+        }
+        if (p.remainingBitsCount() != 0 || p.remainingRefsCount() != 1) {
+            return null;
+        }
+        return FactoryHandoff.fromCell(p.loadRef());
+    } catch {
+        return null;
+    }
+}
+
 // ---------------- Collection (Tier 1) ----------------
 struct (0x2428aaa6) SubdomainInit {
     queryId: uint64
@@ -131,6 +147,12 @@ struct (0x2428aaa6) SubdomainInit {
     label: Cell<RemainingBitsAndRefs>
     setWalletToMinter: bool
     initialRecords: Cell<DnsRecords>?
+}
+
+struct (0x49524459) ItemReady {
+    queryId: uint64
+    index: uint256
+    minter: address
 }
 
 struct (0x49278399) RegisterSubdomain {
@@ -184,4 +206,29 @@ struct (0x2096dda6) RescueNft {
     queryId: uint64
     nftAddress: address
     toAddress: address
+}
+
+struct (0x41434353) SetAccessMode {
+    queryId: uint64
+    accessMode: uint8
+}
+
+struct (0x414c4c57) SetAllowlistEntry {
+    queryId: uint64
+    wallet: address
+    allowed: bool
+}
+
+struct (0x52505254) RetryParentReturn {
+    queryId: uint64
+}
+
+struct (0x434d494e) ConfirmMint {
+    queryId: uint64
+    index: uint256
+}
+
+// This struct is placed in the TEP-62 forward_payload, normally behind the Either ref bit.
+struct (0x4c4e4b33) LinkedParentAction {
+    action: uint8
 }

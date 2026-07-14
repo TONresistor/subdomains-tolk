@@ -55,14 +55,14 @@ get fun `test elite: malformed initialRecords are rejected before minting`() {
     expect(testing.isDeployed(item.address)).toEqual(true);
 }
 
-// #4 price validation: a degenerate (zero) grid is refunded at create, never frozen into a collection.
-get fun `test elite: factory refunds a degenerate price grid and deploys nothing`() {
+// v3 supports protocol-free collections while keeping deployment funding mandatory.
+get fun `test elite: factory deploys a zero-price collection`() {
     val owner = newActor("dgo");
     val parent = newActor("dgp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
-    val badGrid: PriceConfig = {
+    val freeGrid: PriceConfig = {
         minChars: 4,
         p1: ton("0"),
         p2: ton("0"),
@@ -76,12 +76,12 @@ get fun `test elite: factory refunds a degenerate price grid and deploys nothing
         p10: ton("0"),
         pRest: ton("0"),
     };
-    val badMeta: CollectionMeta = {
-        priceConfig: badGrid.toCell(),
+    val freeMeta: CollectionMeta = {
+        priceConfig: freeGrid.toCell(),
         collectionContent: beginCell().endCell(),
         itemContentBaseUri: beginCell().endCell(),
     };
-    val payload = beginCell().storeRef(badMeta.toCell()).endCell().beginParse();
+    val payload = beginCell().storeRef(freeMeta.toCell()).endCell().beginParse();
 
     val res = factory.sendOwnershipAssigned(
         parent.address,
@@ -90,11 +90,7 @@ get fun `test elite: factory refunds a degenerate price grid and deploys nothing
         payload,
         { value: ton("0.5"), bounce: false },
     );
-    expect(
-        res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
-    ).toBeNotNull();
-    expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
-    expect(factory.getDeployedCount()).toEqual(0);
+    expect(res.findTransaction({ deploy: true })).toBeNotNull();
 }
 
 // #3 EnforceResolver: the caller must fund the pin, otherwise it would drain the collection.
@@ -140,7 +136,7 @@ get fun `test elite: TEP-66 royalty params are exposed (0%, conformant)`() {
 // lock (which would throw after the .ton was already dispatched -> strand, the v2 incident class).
 get fun `test elite: masterchain-owned .ton is refunded, not stranded`() {
     val parent = newActor("mcp");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(parent.address, { value: ton("1"), bounce: false });
 
     val mcAdmin = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("mcown"));
@@ -160,7 +156,6 @@ get fun `test elite: masterchain-owned .ton is refunded, not stranded`() {
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toBeNotNull();
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
-    expect(factory.getDeployedCount()).toEqual(0);
 }
 
 // A Locked create is only meaningful for a basechain TON DNS item. Treat an impossible sender
@@ -168,7 +163,7 @@ get fun `test elite: masterchain-owned .ton is refunded, not stranded`() {
 // nothing instead of deriving an unusable collection address.
 get fun `test elite: masterchain parent is refunded and never deployed`() {
     val owner = newActor("mc-parent-owner");
-    val factory = SubdomainFactory.fromStorage({ deployedCount: 0, pending: [], deployed: [] });
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(owner.address, { value: ton("1"), bounce: false });
 
     val mcParent = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("mc-parent"));
@@ -185,5 +180,4 @@ get fun `test elite: masterchain parent is refunded and never deployed`() {
         res.findTransaction<TransferOwnership>({ from: factory.address, to: mcParent }),
     ).toBeNotNull();
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
-    expect(factory.getDeployedCount()).toEqual(0);
 }

@@ -3,9 +3,9 @@
 Anyone who owns a `.ton` domain can open their own subdomain registry. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
 
 Creators choose one of two explicit guarantees. **Locked** transfers the parent `.ton` into the
-collection and freezes resolution permanently. **Linked** keeps the parent in the owner's wallet and
-delegates with a revocable `next_resolver` record; it can later upgrade one-way to Locked. All
-contracts are **non-upgradeable** (`embed_code`).
+collection and freezes resolution permanently. **Linked** keeps the parent in the owner's wallet,
+supports trustless owner claims through a parent NFT round trip, and can explicitly convert one-way
+to Locked. All contracts are **non-upgradeable** (`embed_code`).
 
 > Written in **Tolk** with the **[Acton](https://github.com/ton-blockchain/acton)** toolchain.
 
@@ -16,7 +16,7 @@ Three tiers, each non-upgradeable:
 | Tier | Contract | Role |
 |------|----------|------|
 | 0 | `SubdomainFactory` | One global, free, permissionless deployer. Derives collections and retains phase-aware recovery state until deployment and custody are positively acknowledged. |
-| 1 | `SubdomainCollection` | One per domain. Locked or Linked custody state, mint, resolver routing (`sha256(label)` to item), transferable admin, parent-lease keep-alive. |
+| 1 | `SubdomainCollection` | One per domain. Custody, Linked claims, access policy, immutable pricing, mint and DNS routing. |
 | 2 | `SubdomainItem` | One per subdomain. TEP-62 NFT holding DNS records, `dnsresolve`, transfer. |
 
 ## How it works
@@ -31,9 +31,14 @@ Three tiers, each non-upgradeable:
   notifications whose recipient compute phase is skipped before factory code can record recovery.
 - **Create Linked (2 txs).** The creator asks the factory to deploy a creator-bound collection, then
   sets the parent `.ton`'s `next_resolver` from their wallet. The parent never leaves their custody.
-  Transferring it into the collection later upgrades Linked to Locked irreversibly.
-- Prices are fixed at creation and **immutable** thereafter (`get_price(charCount)` is cacheable).
-- **Mint.** `register_subdomain(label)` deploys the item NFT (owner = minter). Each registry sets a minimum length (1-4) and a price per length (1-char .. 10-char, then 11+); short names are premium. Surplus refunded.
+  A buyer can later claim Collection control without the seller by temporarily transferring the
+  parent through the Collection with a `0.01 TON` forward amount. `CLAIM` updates the admin, withdraws
+  available revenue and returns the parent. `CONVERT_LOCKED` keeps the parent permanently.
+- **Policy.** Registries can be public, allowlist-only or admin-only. The allowlist only controls
+  mint access.
+- **Pricing.** The monotonic length grid is chosen at creation, immutable and may contain zero prices.
+- **Mint.** Registration deploys the item NFT and finalizes only after authenticated `ItemReady`.
+  Failed deploys release the label and refund recoverable value.
 - **Resolve.** Root, then `.ton` collection, then parent item, then the frozen `next_resolver`, then our collection, then `sha256(label)`, then item, then records.
 - **Metadata.** Off-chain; the contract stores only a base URI set at creation. `set_content` (admin) re-points metadata without touching the price grid.
 
@@ -44,15 +49,16 @@ economics, DNS behavior, recovery rules and invariants of all three contracts.
 
 ## Deployment (mainnet)
 
+v3 is implemented on its release branch and has not been deployed. Previous mainnet addresses are
+private test deployments and are not migration or compatibility targets:
+
 | | Address |
 |---|---|
-| **Production factory (v2.0 Locked + Linked)** | `EQApI7v_L89-tdFN4uVug4aCUcPtD42vfudQ7AhBFlLBWO3c` |
-| Legacy factory (v1.1 Locked) | `EQBpE2VuJEGMNSRak7cQCHelIsyZKyQFddIsyhmkV0vdHuJs` |
+| Private test factory (v2.0) | `EQApI7v_L89-tdFN4uVug4aCUcPtD42vfudQ7AhBFlLBWO3c` |
+| Earlier test factory (v1.1 Locked) | `EQBpE2VuJEGMNSRak7cQCHelIsyZKyQFddIsyhmkV0vdHuJs` |
 
 v2.0.0 was deployed on mainnet on 2026-07-10 in transaction
 [`cfccc7b1…60745f`](https://tonscan.org/tx/cfccc7b1d8247c40e863f555cd805004974256ed1b295d6f5e2d02ebff60745f).
-The registry migration was applied first, then the production frontend was atomically repointed via
-`NEXT_PUBLIC_FACTORY_ADDRESS`.
 
 ## Develop
 

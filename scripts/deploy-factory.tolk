@@ -27,11 +27,7 @@ fun currentGlobalId(): int
 fun main() {
     val walletName = "prod-deployer";
     val deployer = scripts.wallet("prod-deployer");
-    val initialStorage: FactoryStorage = {
-        deployedCount: 0,
-        pending: [],
-        deployed: [],
-    };
+    val initialStorage: FactoryStorage = { pending: [] };
     val factory = SubdomainFactory.fromStorage(initialStorage);
 
     val factoryCodeHash = build("SubdomainFactory").hash();
@@ -108,5 +104,4 @@ fun main() {
     }
 
     println("FACTORY_ADDRESS={}", factory.address);
-    println("Deployed collections: {}", factory.getDeployedCount());
 }

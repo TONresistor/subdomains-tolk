@@ -19,13 +19,12 @@ struct SubdomainCollection {
 fun SubdomainCollection.fromStorage(
     storage: CollectionSkeleton,
     toShard: AddressShardingOptions? = null,
-    workchain: int8 = BASECHAIN,
 ): SubdomainCollection {
     val stateInit = ContractState {
         code: build("SubdomainCollection"),
         data: storage.toCell(),
     };
-    val address = AutoDeployAddress { workchain, stateInit, toShard }.calculateAddress();
+    val address = AutoDeployAddress { stateInit, toShard }.calculateAddress();
     return SubdomainCollection { address, stateInit };
 }
 
@@ -70,6 +69,40 @@ fun SubdomainCollection.sendRegisterSubdomain(
     return net.send(from, genericMsg);
 }
 
+fun SubdomainCollection.sendItemReady(
+    self,
+    from: address,
+    queryId: uint64,
+    index: uint256,
+    minter: address,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: ItemReady { queryId, index, minter },
+    });
+    return net.send(from, genericMsg);
+}
+
+fun SubdomainCollection.sendReportStaticData(
+    self,
+    from: address,
+    queryId: uint64,
+    itemIndex: uint256,
+    collectionAddress: address,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: ReportStaticData { queryId, itemIndex, collectionAddress },
+    });
+    return net.send(from, genericMsg);
+}
+
 fun SubdomainCollection.sendSetContent(
     self,
     from: address,
@@ -85,6 +118,39 @@ fun SubdomainCollection.sendSetContent(
             queryId,
             meta: meta.toCell(),
         },
+    });
+    return net.send(from, genericMsg);
+}
+
+fun SubdomainCollection.sendSetAccessMode(
+    self,
+    from: address,
+    queryId: uint64,
+    accessMode: uint8,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: SetAccessMode { queryId, accessMode },
+    });
+    return net.send(from, genericMsg);
+}
+
+fun SubdomainCollection.sendSetAllowlistEntry(
+    self,
+    from: address,
+    queryId: uint64,
+    wallet: address,
+    allowed: bool,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: SetAllowlistEntry { queryId, wallet, allowed },
     });
     return net.send(from, genericMsg);
 }
@@ -235,6 +301,37 @@ fun SubdomainCollection.sendConfirmParentHandoff(
     return net.send(from, genericMsg);
 }
 
+fun SubdomainCollection.sendRetryParentReturn(
+    self,
+    from: address,
+    queryId: uint64,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: RetryParentReturn { queryId },
+    });
+    return net.send(from, genericMsg);
+}
+
+fun SubdomainCollection.sendConfirmMint(
+    self,
+    from: address,
+    queryId: uint64,
+    index: uint256,
+    config: SendParams = {},
+): SendResultList {
+    val genericMsg = createMessage({
+        bounce: config.bounce,
+        value: config.value,
+        dest: self.address,
+        body: ConfirmMint { queryId, index },
+    });
+    return net.send(from, genericMsg);
+}
+
 /// Send message to the contract with a custom body cell
 fun SubdomainCollection.sendAny(
     self,
@@ -271,12 +368,36 @@ fun SubdomainCollection.getMintedCount(self): int {
     return net.runGetMethod(self.address, "get_minted_count");
 }
 
+fun SubdomainCollection.getIsMintPending(self, index: uint256): bool {
+    return net.runGetMethod(self.address, "get_is_mint_pending", [index]);
+}
+
 fun SubdomainCollection.getNftContent(self, index: int, individualContent: cell): cell {
     return net.runGetMethod(self.address, "get_nft_content", [index, individualContent]);
 }
 
 fun SubdomainCollection.getPrice(self, charCount: int): coins {
     return net.runGetMethod(self.address, "get_price", [charCount]);
+}
+
+fun SubdomainCollection.getAccessMode(self): int {
+    return net.runGetMethod(self.address, "get_access_mode");
+}
+
+fun SubdomainCollection.getWithdrawableRevenue(self): coins {
+    return net.runGetMethod(self.address, "get_withdrawable_revenue");
+}
+
+fun SubdomainCollection.getIsAllowlisted(self, wallet: address): bool {
+    return net.runGetMethod(self.address, "get_is_allowlisted", [wallet]);
+}
+
+fun SubdomainCollection.getMintQuote(self, wallet: address, charCount: int): MintQuoteReply {
+    return net.runGetMethod(self.address, "get_mint_quote", [wallet, charCount]);
+}
+
+fun SubdomainCollection.getParentReturn(self): ParentReturnReply {
+    return net.runGetMethod(self.address, "get_parent_return");
 }
 
 fun SubdomainCollection.getMinChars(self): int {
