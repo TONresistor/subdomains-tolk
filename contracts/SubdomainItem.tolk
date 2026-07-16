@@ -23,6 +23,17 @@ fun ItemStorageInitialized.save(self) {
     contract.setData(self.toCell());
 }
 
+fun isValidTep62ForwardPayload(payload: TransferForwardPayload): bool {
+    val (bits, refs) = payload.remainingBitsAndRefsCount();
+    if (bits == 0) {
+        return false;
+    }
+    if (payload.preloadUint(1) == 0) {
+        return true;
+    }
+    return bits == 1 && refs == 1;
+}
+
 @inline
 fun applyOwnershipTransfer(
     myBalance: coins,
@@ -31,6 +42,10 @@ fun applyOwnershipTransfer(
     transferData: TransferOwnershipData,
     fwdFees: coins,
 ) {
+    assert (
+        isValidTep62ForwardPayload(transferData.forwardPayload)
+    ) throw ERROR_INCORRECT_FORWARD_PAYLOAD;
+
     val newOwnerAddress = transferData.newOwnerAddress;
     newOwnerAddress.forceBasechain();
 

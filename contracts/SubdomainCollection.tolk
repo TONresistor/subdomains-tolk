@@ -116,6 +116,18 @@ fun parseLinkedParentAction(payload: TransferForwardPayload): LinkedParentAction
     }
 }
 
+fun isEmptyTep62ForwardPayload(payload: TransferForwardPayload): bool {
+    val (bits, refs) = payload.remainingBitsAndRefsCount();
+    if (bits != 1 || refs != 0) {
+        return false;
+    }
+    return payload.preloadUint(1) == 0;
+}
+
+fun emptyTep62ForwardPayload(): TransferForwardPayload {
+    return beginCell().storeBool(false).endCell().beginParse();
+}
+
 fun sendPendingParentReturn(parent: address, pending: PendingParentReturn) {
     val returnParent = createMessage({
         bounce: BounceMode.RichBounce,
@@ -128,7 +140,7 @@ fun sendPendingParentReturn(parent: address, pending: PendingParentReturn) {
                 responseDestination: contract.getAddress(),
                 customPayload: null,
                 forwardAmount: 0,
-                forwardPayload: beginCell().endCell().beginParse(),
+                forwardPayload: emptyTep62ForwardPayload(),
             },
         },
     });
@@ -388,7 +400,7 @@ fun onBouncedMessage(in: InMessageBounced) {
                 returned.transferData.responseDestination! != contract.getAddress() ||
                 returned.transferData.customPayload != null ||
                 returned.transferData.forwardAmount != 0 ||
-                !returned.transferData.forwardPayload.isEmpty()
+                !isEmptyTep62ForwardPayload(returned.transferData.forwardPayload)
             ) {
                 return;
             }
@@ -869,7 +881,6 @@ fun onInternalMessage(in: InMessage) {
             assertAdmin(in.senderAddress, storage.admin);
             // The cached Linked admin is not proof of current parent ownership.
             assert (msg.nftAddress != storage.parentDomain) throw ERROR_RESCUE_PARENT_FORBIDDEN;
-            val emptyPayload = beginCell().endCell().beginParse();
             val rescueMsg = createMessage({
                 bounce: true,
                 dest: msg.nftAddress,
@@ -881,7 +892,7 @@ fun onInternalMessage(in: InMessage) {
                         responseDestination: storage.admin,
                         customPayload: null,
                         forwardAmount: 0,
-                        forwardPayload: emptyPayload,
+                        forwardPayload: emptyTep62ForwardPayload(),
                     },
                 },
             });
@@ -1104,7 +1115,8 @@ get fun get_mint_quote(wallet: address, charCount: int): MintQuoteReply {
         };
     }
     val effectivePrice = config.priceForCharCount(charCount);
-    val allowed = resolveMintAccess(policy, storage.admin, wallet);
+    val allowed = wallet.getWorkchain() == BASECHAIN &&
+    resolveMintAccess(policy, storage.admin, wallet);
     return {
         allowed,
         effectivePrice,

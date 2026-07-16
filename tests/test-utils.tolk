@@ -49,6 +49,10 @@ fun emptyPayload(): RemainingBitsAndRefs {
     return beginCell().endCell().beginParse();
 }
 
+fun emptyTep62ForwardPayload(): TransferForwardPayload {
+    return beginCell().storeBool(false).endCell().beginParse();
+}
+
 fun linkedActionPayload(action: uint8): RemainingBitsAndRefs {
     return beginCell()
         .storeBool(true)
@@ -71,7 +75,7 @@ fun makeTransferData(
         responseDestination,
         customPayload: null,
         forwardAmount,
-        forwardPayload: emptyPayload(),
+        forwardPayload: emptyTep62ForwardPayload(),
     };
 }
 

@@ -108,7 +108,7 @@ get fun `test v3 parent safety: Linked retry is blocked while return is in fligh
             responseDestination: collection.address,
             customPayload: null,
             forwardAmount: 0,
-            forwardPayload: beginCell().endCell().beginParse(),
+            forwardPayload: emptyTep62ForwardPayload(),
         },
     };
     testing.processSingleTraceStep(
@@ -396,7 +396,7 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
             responseDestination: skeleton.address,
             customPayload: null,
             forwardAmount: 0,
-            forwardPayload: beginCell().endCell().beginParse(),
+            forwardPayload: emptyTep62ForwardPayload(),
         },
     };
     val skeletonBounce = net.send(
@@ -440,7 +440,7 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
             responseDestination: collection.address,
             customPayload: null,
             forwardAmount: 0,
-            forwardPayload: beginCell().endCell().beginParse(),
+            forwardPayload: emptyTep62ForwardPayload(),
         },
     };
     net.send(
@@ -450,6 +450,23 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
             dest: collection.address,
             value: ton("0.01"),
             body: parentSafetyRichBounceBody(exactReturn.toCell(), ton("0.01")),
+        }).bounced(),
+    );
+    expect(collection.getParentReturn().inFlight).toEqual(true);
+
+    var malformedPayload = exactReturn;
+    malformedPayload.transferData.forwardPayload = beginCell()
+        .storeBool(false)
+        .storeBool(false)
+        .endCell()
+        .beginParse();
+    net.send(
+        parent.address,
+        createMessage({
+            bounce: false,
+            dest: collection.address,
+            value: ton("0.01"),
+            body: parentSafetyRichBounceBody(malformedPayload.toCell(), ton("0.01")),
         }).bounced(),
     );
     expect(collection.getParentReturn().inFlight).toEqual(true);
