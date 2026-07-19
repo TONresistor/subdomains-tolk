@@ -3,6 +3,7 @@ import "@acton/env"
 import "@acton/io"
 import "@acton/emulation/network"
 import "@acton/emulation/scripts"
+import "@contracts/storage"
 import "@wrappers/SubdomainFactory.gen"
 
 const MAINNET_GLOBAL_ID = -239
@@ -19,8 +20,8 @@ fun requireRetry(condition: bool, message: string) {
 }
 
 // Phase-aware recovery for a pending collection deployment. The pending admin must run this with
-// their own configured Acton wallet. 0.5 TON covers both the deploy phase and the larger final
-// handoff recovery phase; unused deploy-phase value is refunded by the factory.
+// their own configured Acton wallet. The deploy boundary is the largest recovery requirement;
+// any surplus in a later handoff phase is refunded by the factory.
 fun main() {
     val walletName = env<string>("RETRY_WALLET_NAME") ?? "prod-deployer";
     val admin = scripts.wallet(walletName);
@@ -29,7 +30,7 @@ fun main() {
     val queryId = env<int>("RETRY_QUERY_ID") ?? blockchain.logicalTime();
     val declaredNetwork = env<string>("RETRY_NETWORK") ?? "emulation";
     val vmGlobalId = currentGlobalId();
-    val retryValue = ton("0.5");
+    val retryValue = COLLECTION_DEPLOY_VALUE + FACTORY_GAS_MARGIN;
 
     println("RETRY_BROADCAST={}", net.isBroadcasting());
     println("RETRY_NETWORK={}", declaredNetwork);

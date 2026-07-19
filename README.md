@@ -26,9 +26,10 @@ Three tiers, each non-upgradeable:
   initializes and replies `CollectionReady`, and only then is the NFT handed into permanent custody.
   The pending record is cleared only after the collection persists the authenticated parent landing
   and replies `ParentHandoffComplete`. Rich bounces and lost callbacks remain phase-aware and retryable.
-  The NFT transfer must attach about `0.75 TON` and forward at least `0.5 TON` to the factory; the
-  shipped frontend pins `0.6 TON`. Do not reduce this forward amount: TON DNS permits dust
-  notifications whose recipient compute phase is skipped before factory code can record recovery.
+  The NFT transfer forwards exactly `0.20 TON` to the factory. The fork-verified wallet flow attaches
+  `0.30 TON` to the parent transfer. Do not reduce the forward amount below `0.20 TON`: TON DNS
+  permits dust notifications whose recipient compute phase is skipped before factory code can record
+  recovery.
 - **Create Linked (2 txs).** The creator asks the factory to deploy a creator-bound collection, then
   sets the parent `.ton`'s `next_resolver` from their wallet. The parent never leaves their custody.
   A buyer can later claim Collection control without the seller by temporarily transferring the
@@ -49,7 +50,7 @@ economics, DNS behavior, recovery rules and invariants of all three contracts.
 
 ## Deployment (mainnet)
 
-v3 is implemented on its release branch and has not been deployed. Previous mainnet addresses are
+v4 is implemented on its release branch and has not been deployed. Previous mainnet addresses are
 private test deployments and are not migration or compatibility targets:
 
 | | Address |
@@ -96,8 +97,8 @@ a separate, explicit operation; tests and dry-runs never broadcast.
 
 If validation rejects an executable Locked create, a deployment fails, or a final custody callback is
 interrupted, the pending admin can prepare and run the phase-aware recovery script. It prints and pins
-the real network identity and every target before broadcast; its fixed 0.5 TON covers every recovery
-phase (unused deploy-phase value is refunded):
+the real network identity and every target before broadcast. It sends the exact largest recovery
+boundary, currently `0.135 TON`; unused value in cheaper phases is refunded:
 
 ```bash
 RETRY_WALLET_NAME='<configured pending-admin wallet>' \

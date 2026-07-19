@@ -146,7 +146,6 @@ struct (0x2428aaa6) SubdomainInit {
     minter: address
     label: Cell<RemainingBitsAndRefs>
     setWalletToMinter: bool
-    initialRecords: Cell<DnsRecords>?
 }
 
 struct (0x49524459) ItemReady {
@@ -159,7 +158,6 @@ struct (0x49278399) RegisterSubdomain {
     queryId: uint64
     label: Cell<RemainingBitsAndRefs> // bare label bytes, e.g. "alice" (no trailing \0)
     setWalletToMinter: bool
-    initialRecords: Cell<DnsRecords>?
 }
 
 struct (0x7969d64e) SetContent {

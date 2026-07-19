@@ -2,7 +2,6 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
 import "@acton/testing/expect"
-import "@contracts/dns-utils"
 import "@contracts/errors"
 import "@contracts/messages"
 import "@contracts/prices"
@@ -23,34 +22,11 @@ get fun `test elite: masterchain minter is rejected, label stays free`() {
         7,
         labelSlice("alice"),
         true,
-        null,
         { value: ton("20"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_WRONG_WORKCHAIN });
 
     // the slot is untouched: a normal basechain mint of the same label still works
-    val (item, _r) = mintSubdomain(coll, user, "alice");
-    expect(testing.isDeployed(item.address)).toEqual(true);
-}
-
-// #1 mint-brick: malformed initialRecords fail at the collection (before minted.set), not as a
-// bounced item deploy that would brick the slot.
-get fun `test elite: malformed initialRecords are rejected before minting`() {
-    val (coll, _parent, _owner, user) = deployLockedCollection();
-    val badRecords = beginCell()
-        .storeUint(1, BYTE_SIZE)
-        .endCell() as Cell<DnsRecords>;                                                 // tag != 0x00
-
-    val res = coll.sendRegisterSubdomain(
-        user.address,
-        7,
-        labelSlice("alice"),
-        true,
-        badRecords,
-        { value: ton("20"), bounce: true },
-    );
-    expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_CONTENT_TAG_INVALID });
-
     val (item, _r) = mintSubdomain(coll, user, "alice");
     expect(testing.isDeployed(item.address)).toEqual(true);
 }
@@ -97,10 +73,18 @@ get fun `test elite: factory deploys a zero-price collection`() {
 get fun `test elite: enforce_resolver requires the caller to fund the pin`() {
     val (coll, parent, _owner, user) = deployLockedCollection();
 
-    val low = coll.sendEnforceResolver(user.address, 1, { value: ton("0.05"), bounce: true });
+    val low = coll.sendEnforceResolver(
+        user.address,
+        1,
+        { value: RESOLVER_PIN_FUND - 1, bounce: true },
+    );
     expect(low).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
 
-    val ok = coll.sendEnforceResolver(user.address, 2, { value: ton("0.2"), bounce: true });
+    val ok = coll.sendEnforceResolver(
+        user.address,
+        2,
+        { value: RESOLVER_PIN_FUND, bounce: true },
+    );
     expect(ok).toHaveSuccessfulTx({ to: coll.address });
     expect(ok.findTransaction({ from: coll.address, to: parent.address })).toBeNotNull();
 }

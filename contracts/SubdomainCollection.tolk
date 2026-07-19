@@ -9,7 +9,7 @@ import "../gen/SubdomainItem.code"
 
 contract SubdomainCollection {
     author: "tolk-subdomains"
-    version: "3.0.0"
+    version: "4.0.0"
     description: "Per-domain DNS registry with claimable Linked ownership, access policy and immutable pricing."
     incomingMessages: AllowedCollectionMessage
     storage: CollectionStorage
@@ -65,6 +65,21 @@ fun resolveMintAccess(
     }
     return policy.accessMode == ACCESS_PUBLIC ||
     (policy.accessMode == ACCESS_ALLOWLIST && policy.allowlist.exists(minter));
+}
+
+fun isParentHeartbeatDue(storage: CollectionStorage, nowTime: uint32): bool {
+    return !storage.isLinked && nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL;
+}
+
+fun calculateMintFunding(
+    storage: CollectionStorage,
+    nowTime: uint32,
+): coins {
+    var funding = ITEM_DEPLOY_COST + MINT_FEE_BUFFER;
+    if (isParentHeartbeatDue(storage, nowTime)) {
+        funding += PARENT_HEARTBEAT_AMOUNT;
+    }
+    return funding;
 }
 
 fun calculateWithdrawAmount(
@@ -188,7 +203,7 @@ fun pinNextResolver(parent: address, queryId: uint64, mode: int) {
     val resolverPinMessage = createMessage({
         bounce: true,
         dest: parent,
-        value: ton("0.05"),
+        value: RESOLVER_PIN_VALUE,
         body: ChangeDnsRecord {
             queryId,
             key: CAT_DNS_NEXT_RESOLVER,
@@ -276,7 +291,6 @@ fun processRegistration(
     queryId: uint64,
     labelCell: Cell<RemainingBitsAndRefs>,
     setWalletToMinter: bool,
-    initialRecords: Cell<DnsRecords>?,
 ) {
     senderAddress.forceBasechain();
 
@@ -288,10 +302,6 @@ fun processRegistration(
     assert (len % BYTE_SIZE == 0) throw ERROR_LABEL_INVALID_CHARS;
     assert (checkDomainString(label, len)) throw ERROR_LABEL_INVALID_CHARS;
     assert (label.remainingRefsCount() == 0) throw ERROR_LABEL_INVALID_CHARS;
-
-    if (initialRecords != null) {
-        val _validatedRecords = initialRecords.load();
-    }
 
     val index = label.hash();
     var policy = storage.policy.load();
@@ -306,9 +316,9 @@ fun processRegistration(
     val price = cfg.priceForCharCount(len / BYTE_SIZE);
     val allowed = resolveMintAccess(policy, storage.admin, senderAddress);
     assert (allowed) throw ERROR_MINT_NOT_ALLOWED;
-    assert (
-        inValue >= price + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
-    ) throw ERROR_INSUFFICIENT_MINT_VALUE;
+    val nowTime = blockchain.now();
+    val mintFunding = calculateMintFunding(storage, nowTime);
+    assert (inValue >= price + mintFunding) throw ERROR_INSUFFICIENT_MINT_VALUE;
 
     policy
         .pendingMints
@@ -333,19 +343,17 @@ fun processRegistration(
             minter: senderAddress,
             label: labelCell,
             setWalletToMinter,
-            initialRecords,
         },
     });
     deployMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
 
-    val nowTime = blockchain.now();
-    if (!storage.isLinked && nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL) {
+    if (isParentHeartbeatDue(storage, nowTime)) {
         sendParentHeartbeat(storage.parentDomain, PARENT_HEARTBEAT_AMOUNT);
         storage.lastParentFillUp = nowTime;
     }
     storage.save();
 
-    val refund = inValue - price - ITEM_DEPLOY_COST - MINT_FEE_BUFFER;
+    val refund = inValue - price - mintFunding;
     if (refund > 0) {
         val refundMsg = createMessage({
             body: Excesses { queryId },
@@ -720,7 +728,6 @@ fun onInternalMessage(in: InMessage) {
                 msg.queryId,
                 msg.label,
                 msg.setWalletToMinter,
-                msg.initialRecords,
             );
         }
 
@@ -1120,7 +1127,11 @@ get fun get_mint_quote(wallet: address, charCount: int): MintQuoteReply {
     return {
         allowed,
         effectivePrice,
-        requiredValue: effectivePrice + ITEM_DEPLOY_COST + MINT_FEE_BUFFER,
+        requiredValue: effectivePrice +
+        calculateMintFunding(
+            storage,
+            blockchain.now(),
+        ),
     };
 }
 

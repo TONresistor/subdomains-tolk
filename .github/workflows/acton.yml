@@ -2,7 +2,7 @@ name: Acton
 
 on:
   push:
-    branches: [main, dev, v3]
+    branches: [main, dev, v3, v4]
   pull_request:
     branches: [main, dev]
 

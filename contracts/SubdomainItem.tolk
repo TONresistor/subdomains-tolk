@@ -6,7 +6,7 @@ import "storage"
 
 contract SubdomainItem {
     author: "tolk-subdomains"
-    version: "3.0.0"
+    version: "4.0.0"
     description: "Subdomain NFT item (TEP-62) holding its own DNS records."
     incomingMessages: AllowedItemMessage
     storage: ItemStorageInitialized
@@ -113,7 +113,7 @@ fun onInternalMessage(in: InMessage) {
         assert (init.index == uninit.index) throw ERROR_INDEX_MISMATCH;
         assert (init.label.load().hash() == uninit.index) throw ERROR_INDEX_MISMATCH;
 
-        var records: DnsRecords = init.initialRecords != null ? init.initialRecords.load() : [];
+        var records: DnsRecords = [];
         if (init.setWalletToMinter) {
             records.set(CAT_WALLET, buildWalletRecord(init.minter));
         }

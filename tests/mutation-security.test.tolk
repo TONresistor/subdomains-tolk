@@ -284,7 +284,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
         owner.address,
         153,
         collectionAddress,
-        { value: ton("0.5") - 1, bounce: true },
+        { value: HANDOFF_RETRY_VALUE - 1, bounce: true },
     );
     expect(underfunded).toHaveFailedTx({
         to: factory.address,
@@ -295,7 +295,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
         owner.address,
         154,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: HANDOFF_RETRY_VALUE, bounce: true },
     );
     expect(retry).toHaveSuccessfulTx({ to: factory.address });
     expect(
@@ -399,7 +399,7 @@ get fun `test mutation: factory authenticates recovery phase, generation and cal
         owner.address,
         201,
         collectionAddress,
-        { value: ton("0.499999999"), bounce: true },
+        { value: HANDOFF_RETRY_VALUE - 1, bounce: true },
     );
     expect(underfundedRetry).toHaveFailedTx({
         to: factory.address,
@@ -664,8 +664,11 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
         }),
     );
     expect(createStep.outMessages.size()).toEqual(2);
-    expect(createStep.outMessages.at<Excesses>(1).info.value.grams).toBeGreater(ton("0.239"));
-    expect(createStep.outMessages.at<Excesses>(1).info.value.grams).toBeLessOrEqual(ton("0.24"));
+    val createRefund = ton("0.5") - COLLECTION_DEPLOY_VALUE - FACTORY_GAS_MARGIN;
+    expect(createStep.outMessages.at<Excesses>(1).info.value.grams).toBeGreater(
+        createRefund - ton("0.001"),
+    );
+    expect(createStep.outMessages.at<Excesses>(1).info.value.grams).toBeLessOrEqual(createRefund);
 
     val exactPending = testing.processSingleTraceStep(
         owner.address,
@@ -687,7 +690,7 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.26"),
+            value: COLLECTION_DEPLOY_VALUE + FACTORY_GAS_MARGIN,
             body: RetryCollectionDeployment {
                 queryId: 602,
                 collectionAddress: factory.getLinkedCollectionAddress(
@@ -730,8 +733,12 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
         }),
     );
     expect(overpaidRetry.outMessages.size()).toEqual(2);
-    expect(overpaidRetry.outMessages.at<Excesses>(1).info.value.grams).toBeGreater(ton("0.239"));
-    expect(overpaidRetry.outMessages.at<Excesses>(1).info.value.grams).toBeLessOrEqual(ton("0.24"));
+    expect(overpaidRetry.outMessages.at<Excesses>(1).info.value.grams).toBeGreater(
+        createRefund - ton("0.001"),
+    );
+    expect(overpaidRetry.outMessages.at<Excesses>(1).info.value.grams).toBeLessOrEqual(
+        createRefund,
+    );
 }
 
 get fun `test mutation: stale returned custody cannot revive an old deployment`() {
@@ -952,7 +959,7 @@ get fun `test mutation: handoff completion cannot skip generation or phase`() {
         owner.address,
         901,
         collectionA,
-        { value: ton("0.499999999"), bounce: true },
+        { value: HANDOFF_RETRY_VALUE - 1, bounce: true },
     );
     expect(retryA).toHaveFailedTx({
         to: factory.address,
@@ -986,7 +993,7 @@ get fun `test mutation: handoff completion cannot skip generation or phase`() {
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.26"),
+            value: COLLECTION_DEPLOY_VALUE + FACTORY_GAS_MARGIN,
             body: RetryCollectionDeployment {
                 queryId: 903,
                 collectionAddress: collectionB,
@@ -1042,7 +1049,6 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
         minter: user.address,
         label: labelSlice(label).toCell(),
         setWalletToMinter: false,
-        initialRecords: null,
     };
     val unminted = testing.processSingleTraceStep(
         collection.getNftAddressByIndex(labelIndex(label)),
@@ -1095,7 +1101,6 @@ get fun `test mutation: skeleton guards and getters remain total`() {
         minter: user.address,
         label: labelSlice(label).toCell(),
         setWalletToMinter: false,
-        initialRecords: null,
     };
     val bounce = net.send(
         skeleton.getNftAddressByIndex(labelIndex(label)),
@@ -1137,7 +1142,6 @@ get fun `test mutation: collection saturates mint rollback and validates handoff
         minter: minter.address,
         label: labelSlice(label).toCell(),
         setWalletToMinter: false,
-        initialRecords: null,
     };
     val rollback = net.send(
         collection.getNftAddressByIndex(labelIndex(label)),

@@ -181,7 +181,6 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
             queryId: 71,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
-            initialRecords: null,
         },
     });
 
@@ -321,7 +320,9 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
 
     expect(recovery.outMessages.size()).toEqual(1);
     val handoffMessage = recovery.outMessages.at<TransferOwnership>(0);
-    expect(handoffMessage.info.value.grams).toEqual(ton("0.48"));
+    expect(handoffMessage.info.value.grams).toEqual(
+        ton("0.24") + MIN_CREATE_VALUE - COLLECTION_DEPLOY_VALUE - FACTORY_GAS_MARGIN,
+    );
     val handoff = handoffMessage.loadBody();
     expect(handoff.transferData.newOwnerAddress).toEqual(owner.address);
 
@@ -455,7 +456,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
             queryId: 92,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.259999999"), bounce: true },
+        { value: COLLECTION_DEPLOY_VALUE + FACTORY_GAS_MARGIN - 1, bounce: true },
     );
     expect(underfundedRetry).toHaveFailedTx({
         to: factory.address,
@@ -887,7 +888,6 @@ get fun `test elite review: collection rejects 127-byte labels and unknown ops`(
         1,
         tooLong,
         true,
-        null,
         { value: ton("100"), bounce: true },
     );
     expect(longResult).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_LONG });
@@ -902,7 +902,6 @@ get fun `test elite review: collection rejects 127-byte labels and unknown ops`(
         2,
         maxLabel,
         true,
-        null,
         { value: ton("1"), bounce: true },
     );
     expect(maxResult).toHaveSuccessfulTx({ to: coll.address });
@@ -1005,7 +1004,6 @@ get fun `test elite review: item init authenticates sender, index and label`() {
         minter: collection.address,
         label: labelSlice("alice").toCell(),
         setWalletToMinter: false,
-        initialRecords: null,
     };
     val fakeSender = net.send(
         attacker.address,
@@ -1148,7 +1146,6 @@ get fun `test elite review: setWalletToMinter false leaves the wallet record abs
         1,
         labelSlice(label),
         false,
-        null,
         { value: ton("20"), bounce: true },
     );
     expect(mint).toHaveSuccessfulTx({ to: coll.address });

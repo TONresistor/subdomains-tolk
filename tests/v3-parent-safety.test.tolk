@@ -175,7 +175,7 @@ get fun `test v3 parent safety: Factory retry probes but never duplicates an in-
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.5"),
+            value: HANDOFF_RETRY_VALUE,
             body: RetryCollectionDeployment {
                 queryId: 1006,
                 collectionAddress,
@@ -185,6 +185,9 @@ get fun `test v3 parent safety: Factory retry probes but never duplicates an in-
 
     expect(retry.outMessages.size()).toEqual(2);
     expect(retry.outMessages.at<ConfirmParentHandoff>(0).info.dest).toEqual(collectionAddress);
+    expect(retry.outMessages.at<ConfirmParentHandoff>(0).info.value.grams).toEqual(
+        HANDOFF_CONFIRM_VALUE,
+    );
     expect(retry.outMessages.at<Excesses>(1).info.dest).toEqual(owner.address);
 
     val bounced = createMessage({
@@ -203,7 +206,7 @@ get fun `test v3 parent safety: Factory retry probes but never duplicates an in-
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.5"),
+            value: HANDOFF_RETRY_VALUE,
             body: RetryCollectionDeployment {
                 queryId: 1007,
                 collectionAddress,
@@ -217,7 +220,7 @@ get fun `test v3 parent safety: Factory retry probes but never duplicates an in-
         owner.address,
         1008,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: HANDOFF_RETRY_VALUE, bounce: true },
     );
     expect(duplicate).toHaveSuccessfulTx({ to: factory.address });
     expect(

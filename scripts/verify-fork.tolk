@@ -1,8 +1,8 @@
 // Fork verification against a real mainnet .ton DnsItem, offline with no broadcast.
 // Run: TONCENTER_MAINNET_API_KEY=... acton script scripts/verify-fork.tolk --fork-net mainnet
 //
-// Checks the standard resolver category, then exercises v3 CLAIM and CONVERT_LOCKED with the
-// canonical parent contract and an exact 0.01 TON forward amount.
+// Checks the standard resolver category, then exercises v4 CLAIM, CONVERT_LOCKED and the complete
+// fee-minimized Locked Factory flow with the canonical parent contract and no broadcast.
 import "@acton/io"
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
@@ -11,6 +11,7 @@ import "@contracts/messages"
 import "@contracts/prices"
 import "@contracts/storage"
 import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainFactory.gen"
 
 struct DnsReply {
     prefixBits: int
@@ -23,7 +24,7 @@ fun dotSlice(): slice {
     return beginCell().storeUint(0, 8).endCell().beginParse();
 }
 
-// internal name "\0test" — TEP-81 requires the leading \0 separator, then the label ("test")
+// Internal name "\0test": TEP-81 requires the leading \0 separator, then the label ("test").
 fun subTest(): slice {
     return beginCell().storeUint(0, 8).storeUint(0x74657374, 32).endCell().beginParse();
 }
@@ -77,6 +78,25 @@ fun transferParent(
     net.send(owner, transfer);
 }
 
+fun returnParent(parent: address, currentOwner: address, owner: address, queryId: uint64) {
+    val transfer = createMessage({
+        bounce: true,
+        value: ton("0.1"),
+        dest: parent,
+        body: TransferOwnership {
+            queryId,
+            transferData: {
+                newOwnerAddress: owner,
+                responseDestination: owner,
+                customPayload: null,
+                forwardAmount: 0,
+                forwardPayload: beginCell().endCell().beginParse(),
+            },
+        },
+    });
+    net.send(currentOwner, transfer);
+}
+
 fun main() {
     val parent = address("EQBV7GD_sEy3EQeFEjxeEzDbidjHIHaM0RMtMmlkJmXHRPvY"); // real telegram-i00040.ton
     val owner = parentData(parent).ownerAddress!;
@@ -103,7 +123,7 @@ fun main() {
 
     val resolverPinMessage = createMessage({
         bounce: false,
-        value: ton("0.1"),
+        value: RESOLVER_PIN_VALUE,
         dest: parent,
         body,
     });
@@ -122,7 +142,7 @@ fun main() {
         deeper.record != null ? "next_resolver returned <- GREEN" : "null",
     );
 
-    val master = testing.treasury("fork-v3-master");
+    val master = testing.treasury("fork-v4-master");
     testing.topUp(master.address, ton("10"));
     val collection = SubdomainCollection.fromStorage({
         master: master.address,
@@ -158,4 +178,51 @@ fun main() {
     assert (!collection.getIsLinked()) throw 1008;
     assert (!collection.getParentReturn().pending) throw 1009;
     println("CONVERT_LOCKED at 0.01 TON           : collection owns parent <- GREEN");
+
+    // Restore the forked NFT to its original owner, then run the complete real DnsItem -> Factory
+    // -> Collection -> DnsItem -> Collection handoff with the exact v4 forward minimum.
+    returnParent(parent, collection.address, owner, 4);
+    assert (parentData(parent).ownerAddress! == owner) throw 1010;
+
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
+    factory.deploy(master.address, { value: ton("0.1"), bounce: false });
+    val lockedCollectionAddress = factory.getCollectionAddress(parent);
+    val createLocked = createMessage({
+        bounce: true,
+        value: ton("0.3"),
+        dest: parent,
+        body: TransferOwnership {
+            queryId: 5,
+            transferData: {
+                newOwnerAddress: factory.address,
+                responseDestination: owner,
+                customPayload: null,
+                forwardAmount: MIN_CREATE_VALUE,
+                forwardPayload: beginCell()
+                    .storeRef(forkCollectionMeta().toCell())
+                    .endCell()
+                    .beginParse(),
+            },
+        },
+    });
+    net.send(owner, createLocked);
+    assert (testing.isDeployed(lockedCollectionAddress)) throw 1011;
+    val lockedCollection = SubdomainCollection.fromAddress(lockedCollectionAddress);
+    assert (lockedCollection.getAdmin()! == owner) throw 1012;
+    assert (!lockedCollection.getIsLinked()) throw 1013;
+    assert (parentData(parent).ownerAddress! == lockedCollectionAddress) throw 1014;
+    val pinned = resolveCat(parent, dotSlice(), CAT_DNS_NEXT_RESOLVER)!;
+    assert (DnsNextResolver.fromCell(pinned).resolver == lockedCollectionAddress) throw 1015;
+    println("LOCKED Factory forward at 0.20 TON   : full real DnsItem flow <- GREEN");
+
+    val fillTime = testing.getAccountState(lockedCollectionAddress)!.storageStat.lastPaid + 1;
+    testing.setNow(fillTime);
+    lockedCollection.sendFillUpParent(
+        master.address,
+        6,
+        { value: MIN_PARENT_FILL, bounce: true },
+    );
+    assert (net.runGetMethod<int>(parent, "get_last_fill_up_time") == fillTime) throw 1016;
+    assert (lockedCollection.getLastParentFillUp() == fillTime) throw 1017;
+    println("PARENT renew at 0.01 TON             : real DnsItem renewed <- GREEN");
 }

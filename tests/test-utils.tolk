@@ -173,7 +173,6 @@ fun mintSubdomain(
         7,
         labelSlice(label),
         true,
-        null,
         { value, bounce: true },
     );
     val deployTx = res.findTransaction({ from: coll.address, deploy: true });

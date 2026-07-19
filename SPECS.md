@@ -1,11 +1,11 @@
-# TON Subdomains v3.0.0 Specification
+# TON Subdomains v4.0.0 Specification
 
 ## 1. Status
 
-This document defines the three non-upgradeable v3 contracts. v3 is not deployed. A release requires
+This document defines the three non-upgradeable v4 contracts. v4 is not deployed. A release requires
 new Factory, Collection and Item addresses and verified code.
 
-Previous mainnet deployments are private tests and are not compatibility targets. The v3 release
+Previous mainnet deployments are private tests and are not compatibility targets. The v4 release
 deploys new addresses without an on-chain migration path.
 
 The protocol implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-81 DNS.
@@ -38,7 +38,7 @@ Collection. Linked ownership is synchronized through an authenticated parent rou
 
 1. Current parent owner transfers the parent to Collection with a positive forward amount and action.
    Official clients use at least `MIN_PARENT_RETURN_VALUE` (`0.01 TON`).
-2. The canonical parent sends `OwnershipAssigned` with the previous owner and v3 action.
+2. The canonical parent sends `OwnershipAssigned` with the previous owner and action.
 3. Collection verifies the exact parent sender and action.
 4. Collection updates state and persists the fixed return recipient. At `0.01 TON` or more it sends
    the return immediately; otherwise any caller can fund the retry.
@@ -87,18 +87,19 @@ is valid, including a fully free grid.
 
 `get_mint_quote` reports live authorization, immutable price and required execution value.
 
-Required mint value is:
+Base required mint value is:
 
 ```text
 effectivePrice + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
 ```
 
-A free mint still requires `0.10 TON` with current constants. This funds execution and Item creation,
-not protocol revenue.
+A free mint requires `0.07 TON`. A Locked mint adds `0.01 TON` only when its once-per-day parent
+heartbeat is due. `get_mint_quote` includes that heartbeat when due. These amounts fund execution
+and Item creation, not protocol revenue.
 
 ## 6. Mint lifecycle and accounting
 
-1. Collection validates label, policy, quote, records and funding.
+1. Collection validates label, policy, price and funding.
 2. Collection reserves `PendingMint`.
 3. Collection deploys the deterministic Item with a rich bounce.
 4. Item persists its state and sends authenticated `ItemReady`.
@@ -196,16 +197,27 @@ Item messages are standard TEP-62 `TransferOwnership` and `GetStaticData`, plus 
 
 | Constant | Value |
 |---|---:|
-| `MIN_CREATE_VALUE` | `0.50 TON` |
-| `COLLECTION_DEPLOY_VALUE` | `0.25 TON` |
-| `ITEM_DEPLOY_COST` | `0.07 TON` |
-| `ITEM_READY_VALUE` | `0.01 TON` |
-| `MINT_FEE_BUFFER` | `0.03 TON` |
+| `MIN_CREATE_VALUE` | `0.20 TON` |
+| `COLLECTION_DEPLOY_VALUE` | `0.13 TON` |
+| `FACTORY_GAS_MARGIN` | `0.005 TON` |
+| `FACTORY_READY_VALUE` | `0.002 TON` |
+| `ITEM_DEPLOY_COST` | `0.06 TON` |
+| `ITEM_READY_VALUE` | `0.002 TON` |
+| `MINT_FEE_BUFFER` | `0.01 TON` |
 | `COLLECTION_MIN_BALANCE` | `0.05 TON` |
 | `FWD_FEE_RESERVE` | `0.02 TON` |
+| `RESOLVER_PIN_VALUE` | `0.01 TON` |
+| `RESOLVER_PIN_FUND` | `0.02 TON` |
+| `MIN_PARENT_FILL` | `0.01 TON` |
+| `PARENT_HEARTBEAT_AMOUNT` | `0.01 TON`, at most once per 24 hours through mint |
 | `MIN_PARENT_RETURN_VALUE` | `0.01 TON` |
-| `MIN_CONFIRM_MINT_VALUE` | `0.03 TON` |
-| Factory recovery retry | `0.50 TON`, unused probe value is refunded |
+| `MIN_CONFIRM_MINT_VALUE` | `0.005 TON` |
+| `HANDOFF_RETRY_VALUE` | `0.10 TON` |
+| `HANDOFF_CONFIRM_VALUE` | `0.02 TON` |
+| `MIN_REJECTED_RETURN_VALUE` | `0.05 TON` |
+
+An exact Linked creation costs `0.135 TON`. An exact Locked parent notification forwards `0.20 TON`
+to Factory. Recovery sends at most `0.135 TON`; unused value is refunded where the phase allows it.
 
 ## 10. Release invariants
 

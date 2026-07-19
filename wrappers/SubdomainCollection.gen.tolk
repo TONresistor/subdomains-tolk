@@ -52,7 +52,6 @@ fun SubdomainCollection.sendRegisterSubdomain(
     queryId: uint64,
     label: RemainingBitsAndRefs,
     setWalletToMinter: bool,
-    initialRecords: Cell<DnsRecords>?,
     config: SendParams = {},
 ): SendResultList {
     val genericMsg = createMessage({
@@ -63,7 +62,6 @@ fun SubdomainCollection.sendRegisterSubdomain(
             queryId,
             label: label.toCell(),
             setWalletToMinter,
-            initialRecords,
         },
     });
     return net.send(from, genericMsg);

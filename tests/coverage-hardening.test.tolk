@@ -167,7 +167,6 @@ get fun `test cover: registry can set a 2-char minimum`() {
         2,
         labelSlice("a"),
         true,
-        null,
         { value: ton("50"), bounce: true },
     );
     expect(one).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_SHORT });
@@ -248,7 +247,6 @@ get fun `test cover: short names price at their own tier`() {
         1,
         labelSlice("x"),
         true,
-        null,
         { value: ton("40"), bounce: true },
     ); // < 50
     expect(low).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
@@ -267,7 +265,6 @@ get fun `test cover: non-byte-aligned label is rejected`() {
         1,
         ragged,
         true,
-        null,
         { value: ton("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
@@ -282,7 +279,6 @@ get fun `test cover: hyphen allowed interior, rejected at the edge`() {
         1,
         labelSlice("-abcd"),
         true,
-        null,
         { value: ton("50"), bounce: true },
     );
     expect(lead).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });

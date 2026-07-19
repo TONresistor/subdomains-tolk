@@ -189,7 +189,7 @@ get fun `test linked: factory rejects one nanotON below the exact funding bounda
         parent.address,
         owner.address,
         makeMeta(),
-        { value: ton("0.259999999"), bounce: true },
+        { value: COLLECTION_DEPLOY_VALUE + FACTORY_GAS_MARGIN - 1, bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
 }
@@ -206,12 +206,16 @@ get fun `test linked: factory accepts the exact deploy plus gas boundary`() {
         parent.address,
         owner.address,
         makeMeta(),
-        { value: ton("0.26"), bounce: true },
+        { value: COLLECTION_DEPLOY_VALUE + FACTORY_GAS_MARGIN, bounce: true },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
     expect(
         testing.isDeployed(factory.getLinkedCollectionAddress(parent.address, owner.address)),
     ).toEqual(true);
+    val collection = factory.getLinkedCollectionAddress(parent.address, owner.address);
+    expect(testing.getAccountBalance(collection)).toBeGreater(
+        testing.getAccountStorageFee(collection, 10 * 365 * 24 * 60 * 60)!,
+    );
     // The exact create has no immediate surplus. CollectionReady later carries FACTORY_READY_VALUE
     // back, and the factory forwards that callback remainder instead of retaining it.
     val callbackRefund = res.findTransaction<Excesses>({
@@ -435,8 +439,8 @@ get fun `test linked: explicit Locked conversion commits even when the pin canno
         isLinked: true,
         linkedAdmin: owner.address,
     });
-    // Enough to emit the mandatory factory-ready acknowledgement, still below the 0.05 TON pin.
-    coll.deploy(master.address, { value: ton("0.02"), bounce: false });
+    // Keep the setup deliberately thin so the best-effort resolver pin cannot use old balance.
+    coll.deploy(master.address, { value: ton("0.001"), bounce: false });
     coll.sendAny(
         master.address,
         LockCollection {
@@ -446,7 +450,7 @@ get fun `test linked: explicit Locked conversion commits even when the pin canno
             isLinked: true,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.02"), bounce: false },
+        { value: ton("0.003"), bounce: false },
     );
     expect(coll.getIsLinked()).toEqual(true);
 

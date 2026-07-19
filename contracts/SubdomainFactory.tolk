@@ -39,9 +39,6 @@ fun PendingDeployment.toPendingReturn(self): FactoryPendingReturn {
 const PHASE_AWAITING_COLLECTION = 0
 const PHASE_AWAITING_HANDOFF = 1
 const PHASE_RETURNING_PARENT = 2
-const HANDOFF_RETRY_VALUE = ton("0.5")
-const HANDOFF_CONFIRM_VALUE = ton("0.1")
-const MIN_REJECTED_RETURN_VALUE = ton("0.1")
 
 struct FactoryStorage {
     pending: map<uint256, Cell<PendingDeployment>>
@@ -58,7 +55,7 @@ fun FactoryStorage.save(self) {
 
 contract SubdomainFactory {
     author: "tolk-subdomains"
-    version: "3.0.0"
+    version: "4.0.0"
     description: "Global factory for permanent Locked and self-custody Linked subdomain collections."
     incomingMessages: AllowedFactoryMessage
     storage: FactoryStorage
