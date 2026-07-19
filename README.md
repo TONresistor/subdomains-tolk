@@ -21,27 +21,16 @@ Three tiers, each non-upgradeable:
 
 ## How it works
 
-- **Create Locked (1 wallet tx).** The owner transfers their `.ton` to the factory carrying
-  `{metadata + price preset}`. Internally, the factory records a pending deployment, the collection
-  initializes and replies `CollectionReady`, and only then is the NFT handed into permanent custody.
-  The pending record is cleared only after the collection persists the authenticated parent landing
-  and replies `ParentHandoffComplete`. Rich bounces and lost callbacks remain phase-aware and retryable.
-  The NFT transfer forwards exactly `0.20 TON` to the factory. The fork-verified wallet flow attaches
-  `0.30 TON` to the parent transfer. Do not reduce the forward amount below `0.20 TON`: TON DNS
-  permits dust notifications whose recipient compute phase is skipped before factory code can record
-  recovery.
-- **Create Linked (2 txs).** The creator asks the factory to deploy a creator-bound collection, then
-  sets the parent `.ton`'s `next_resolver` from their wallet. The parent never leaves their custody.
-  A buyer can later claim Collection control without the seller by temporarily transferring the
-  parent through the Collection with a `0.01 TON` forward amount. `CLAIM` updates the admin, withdraws
-  available revenue and returns the parent. `CONVERT_LOCKED` keeps the parent permanently.
-- **Policy.** Registries can be public, allowlist-only or admin-only. The allowlist only controls
-  mint access.
-- **Pricing.** The monotonic length grid is chosen at creation, immutable and may contain zero prices.
-- **Mint.** Registration deploys the item NFT and finalizes only after authenticated `ItemReady`.
-  Failed deploys release the label and refund recoverable value.
-- **Resolve.** Root, then `.ton` collection, then parent item, then the frozen `next_resolver`, then our collection, then `sha256(label)`, then item, then records.
-- **Metadata.** Off-chain; the contract stores only a base URI set at creation. `set_content` (admin) re-points metadata without touching the price grid.
+- **Create.** Locked keeps the parent `.ton` in the Collection permanently. Linked keeps it in the
+  owner's wallet and uses its `next_resolver` record.
+- **Mint.** A label becomes a tradeable TEP-62 NFT. Minting can be public, allowlist-only or
+  admin-only, with immutable length-based pricing that may be free.
+- **Resolve.** The Collection routes `sha256(label)` to the NFT, which serves its TEP-81 DNS records.
+- **Linked ownership.** A new parent owner can claim the Collection by sending the parent through it
+  with `0.01 TON`. They become admin, receive available revenue and get the parent back. Linked can
+  also convert permanently to Locked.
+- **Metadata.** The admin can update the off-chain metadata base URI without changing pricing or
+  custody.
 
 ## Contract specification
 
@@ -50,67 +39,18 @@ economics, DNS behavior, recovery rules and invariants of all three contracts.
 
 ## Deployment (mainnet)
 
-v4.0.0 is deployed on mainnet. Previous mainnet addresses are private test deployments and are not
-migration or compatibility targets:
+Factory: `EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN`
 
-| | Address |
-|---|---|
-| v4.0 Factory | `EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN` |
-| Private test factory (v3.0) | `EQBbNMsT6rEtYnrFw5vtYOcPR6wY4iSoq6YCPw1txrX2ADud` |
-| Private test factory (v2.0) | `EQApI7v_L89-tdFN4uVug4aCUcPtD42vfudQ7AhBFlLBWO3c` |
-| Earlier test factory (v1.1 Locked) | `EQBpE2VuJEGMNSRak7cQCHelIsyZKyQFddIsyhmkV0vdHuJs` |
-
-v4.0.0 was deployed on 2026-07-19 in transaction
+Deployed on 2026-07-19 in transaction
 [`01d89dda…39ce1a`](https://tonscan.org/tx/01d89ddabe281cd3b240be565aff7afc4498025dd41f3b859991c69bfe39ce1a).
 
 ## Develop
 
 ```bash
-acton build                                            # compile (lint clean)
-acton test tests                                       # unit/integration suite (use this path; bare test also scans source-func/)
-acton script scripts/deploy-factory.tolk               # local preparation: prints exact address + hashes
-acton script scripts/verify-fork.tolk --fork-net mainnet     # compatibility check against live mainnet state
-acton rpc info <addr> --net mainnet                    # inspect an address
-```
-
-Broadcasting uses the configured `prod-deployer` wallet. Copy the values printed by the local
-preparation run, review them, then pin every one explicitly; the script refuses to broadcast on a
-missing or mismatched value:
-
-```bash
-EXPECTED_DEPLOYER_ADDRESS='<printed wallet>' \
-EXPECTED_FACTORY_ADDRESS='<printed factory>' \
-EXPECTED_FACTORY_CODE_HASH='<printed 0x hash>' \
-EXPECTED_COLLECTION_CODE_HASH='<printed 0x hash>' \
-EXPECTED_ITEM_CODE_HASH='<printed 0x hash>' \
-EXPECTED_INITIAL_STORAGE_HASH='<printed 0x hash>' \
-CONFIRM_FACTORY_DEPLOY=true \
-CONFIRM_MAINNET=true \
-scripts/deploy-factory-mainnet.sh
-```
-
-Do not set the confirmation flags before comparing the mainnet-only target, VM `GLOBALID`, wallet,
-factory address and all three embedded-code hashes with the reviewed release artifacts. The launcher
-accepts no network argument and hardcodes `--net mainnet`; the Tolk script independently rejects any
-non-mainnet declaration and requires `CONFIRM_MAINNET` on every broadcast. This avoids relying on
-Acton 1.1's script VM `GLOBALID` to distinguish endpoints (its testnet broadcast context currently
-still exposes `-239`). The script also refuses an already-active target address. Deployment remains
-a separate, explicit operation; tests and dry-runs never broadcast.
-
-If validation rejects an executable Locked create, a deployment fails, or a final custody callback is
-interrupted, the pending admin can prepare and run the phase-aware recovery script. It prints and pins
-the real network identity and every target before broadcast. It sends the exact largest recovery
-boundary, currently `0.135 TON`; unused value in cheaper phases is refunded:
-
-```bash
-RETRY_WALLET_NAME='<configured pending-admin wallet>' \
-EXPECTED_RETRY_ADMIN_ADDRESS='<printed admin wallet>' \
-RETRY_FACTORY_ADDRESS='<deployed factory>' \
-RETRY_COLLECTION_ADDRESS='<deterministic collection>' \
-RETRY_QUERY_ID='<operator query id>' \
-CONFIRM_COLLECTION_RETRY=true \
-CONFIRM_MAINNET=true \
-scripts/retry-collection-mainnet.sh
+acton build
+acton test tests
+acton check
+acton fmt --check
 ```
 
 The frontend dApp lives in a separate repository.
