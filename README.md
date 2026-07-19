@@ -39,9 +39,15 @@ economics, DNS behavior, recovery rules and invariants of all three contracts.
 
 ## Deployment (mainnet)
 
-Factory: `EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN`
+| Contract | Deployment | Verified source |
+|---|---|---|
+| Factory | [`EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN`](https://tonviewer.com/EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN) | [TON Verifier](https://verifier.ton.org/UQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39igI) |
+| Collection code anchor | [`EQDYIpHPkgxZhEbk6Q9QZdWuqbFdLMJC0fYWfhWJq3hhfIZv`](https://tonviewer.com/EQDYIpHPkgxZhEbk6Q9QZdWuqbFdLMJC0fYWfhWJq3hhfIZv) | [TON Verifier](https://verifier.ton.org/UQDYIpHPkgxZhEbk6Q9QZdWuqbFdLMJC0fYWfhWJq3hhfNuq) |
+| Item code anchor | [`EQDVuzqRciQiChoU4ohKbaEAydncY3_WZNWIHnk2si22BOzY`](https://tonviewer.com/EQDVuzqRciQiChoU4ohKbaEAydncY3_WZNWIHnk2si22BOzY) | [TON Verifier](https://verifier.ton.org/UQDVuzqRciQiChoU4ohKbaEAydncY3_WZNWIHnk2si22BLEd) |
 
-Deployed on 2026-07-19 in transaction
+The code anchors verify the shared Collection and Item code, not a specific contract state.
+
+Factory deployed on 2026-07-19 in transaction
 [`01d89dda…39ce1a`](https://tonscan.org/tx/01d89ddabe281cd3b240be565aff7afc4498025dd41f3b859991c69bfe39ce1a).
 
 ## Develop
