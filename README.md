@@ -50,16 +50,18 @@ economics, DNS behavior, recovery rules and invariants of all three contracts.
 
 ## Deployment (mainnet)
 
-v4 is implemented on its release branch and has not been deployed. Previous mainnet addresses are
-private test deployments and are not migration or compatibility targets:
+v4.0.0 is deployed on mainnet. Previous mainnet addresses are private test deployments and are not
+migration or compatibility targets:
 
 | | Address |
 |---|---|
+| v4.0 Factory | `EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN` |
+| Private test factory (v3.0) | `EQBbNMsT6rEtYnrFw5vtYOcPR6wY4iSoq6YCPw1txrX2ADud` |
 | Private test factory (v2.0) | `EQApI7v_L89-tdFN4uVug4aCUcPtD42vfudQ7AhBFlLBWO3c` |
 | Earlier test factory (v1.1 Locked) | `EQBpE2VuJEGMNSRak7cQCHelIsyZKyQFddIsyhmkV0vdHuJs` |
 
-v2.0.0 was deployed on mainnet on 2026-07-10 in transaction
-[`cfccc7b1…60745f`](https://tonscan.org/tx/cfccc7b1d8247c40e863f555cd805004974256ed1b295d6f5e2d02ebff60745f).
+v4.0.0 was deployed on 2026-07-19 in transaction
+[`01d89dda…39ce1a`](https://tonscan.org/tx/01d89ddabe281cd3b240be565aff7afc4498025dd41f3b859991c69bfe39ce1a).
 
 ## Develop
 

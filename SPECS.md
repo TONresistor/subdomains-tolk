@@ -2,8 +2,8 @@
 
 ## 1. Status
 
-This document defines the three non-upgradeable v4 contracts. v4 is not deployed. A release requires
-new Factory, Collection and Item addresses and verified code.
+This document defines the three non-upgradeable v4 contracts deployed from Factory
+`EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN`.
 
 Previous mainnet deployments are private tests and are not compatibility targets. The v4 release
 deploys new addresses without an on-chain migration path.
