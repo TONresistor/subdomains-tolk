@@ -1,11 +1,11 @@
 # TON Subdomains
 
-Anyone who owns a `.ton` domain can open their own subdomain registry. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
+Anyone who owns a `.ton` domain or a wallet-owned Telegram Username NFT can open a subdomain registry. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
 
-Creators choose one of two explicit guarantees. **Locked** transfers the parent `.ton` into the
+`.ton` creators choose one of two explicit guarantees. **Locked** transfers the parent into the
 collection and freezes resolution permanently. **Linked** keeps the parent in the owner's wallet,
 supports trustless owner claims through a parent NFT round trip, and can explicitly convert one-way
-to Locked. All contracts are **non-upgradeable** (`embed_code`).
+to Locked. Telegram Username parents use Linked only. All contracts are **non-upgradeable** (`embed_code`).
 
 > Written in **Tolk** with the **[Acton](https://github.com/ton-blockchain/acton)** toolchain.
 
@@ -21,14 +21,14 @@ Three tiers, each non-upgradeable:
 
 ## How it works
 
-- **Create.** Locked keeps the parent `.ton` in the Collection permanently. Linked keeps it in the
-  owner's wallet and uses its `next_resolver` record.
+- **Create.** `.ton` supports Locked or Linked. A wallet-owned `.t.me` Username NFT outside an active
+  auction uses Linked, so the NFT stays in the wallet and delegates through its `next_resolver` record.
 - **Mint.** A label becomes a tradeable TEP-62 NFT. Minting can be public, allowlist-only or
   admin-only, with immutable length-based pricing that may be free.
 - **Resolve.** The Collection routes `sha256(label)` to the NFT, which serves its TEP-81 DNS records.
 - **Linked ownership.** A new parent owner can claim the Collection by sending the parent through it
   with `0.01 TON`. They become admin, receive available revenue and get the parent back. Linked can
-  also convert permanently to Locked.
+  also convert a `.ton` parent permanently to Locked.
 - **Metadata.** The admin can update the off-chain metadata base URI without changing pricing or
   custody.
 
@@ -57,6 +57,7 @@ acton build
 acton test tests
 acton check
 acton fmt --check
+acton script scripts/verify-telemint-fork.tolk --fork-net mainnet --fork-block-number 80702445
 ```
 
 The frontend dApp lives in a separate repository.

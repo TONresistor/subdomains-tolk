@@ -2,7 +2,7 @@ name: Acton
 
 on:
   push:
-    branches: [main, dev, v3, v4]
+    branches: [main, dev, v3, v4, v5]
   pull_request:
     branches: [main, dev]
 
@@ -51,6 +51,9 @@ jobs:
 
       - name: Test and coverage
         run: acton test tests --coverage --coverage-format text --coverage-file coverage.txt --coverage-minimum-percent 81
+
+      - name: Telemint mainnet fork
+        run: acton script scripts/verify-telemint-fork.tolk --fork-net mainnet --fork-block-number 80702445
 
       - name: Factory critical mutations
         run: acton test tests --mutate --mutate-contract SubdomainFactory --mutation-levels critical --mutation-minimum-percent 70

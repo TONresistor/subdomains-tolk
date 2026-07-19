@@ -5,6 +5,9 @@
 This document defines the three non-upgradeable v4 contracts deployed from Factory
 `EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN`.
 
+The v5 client integration reuses this exact bytecode for wallet-owned Telegram Username NFT parents
+in Linked mode. No new Factory or contract migration is required.
+
 Previous mainnet deployments are private tests and are not compatibility targets. The v4 release
 deploys new addresses without an on-chain migration path.
 
@@ -14,7 +17,7 @@ The protocol implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-8
 
 ```text
 SubdomainFactory
-  -> SubdomainCollection per parent .ton
+  -> SubdomainCollection per parent DNS NFT
        -> SubdomainItem per sha256(raw_label)
 ```
 
