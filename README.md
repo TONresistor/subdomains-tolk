@@ -40,18 +40,18 @@ Three tiers, each non-upgradeable:
 See [`SPECS.md`](SPECS.md) for the normative storage layouts, messages, getters, permissions,
 economics, DNS behavior, recovery rules and invariants of all three contracts.
 
-## Deployment (v4 mainnet)
+## Deployment (mainnet)
 
 | Contract | Deployment | Verified source |
 |---|---|---|
-| Factory | [`EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN`](https://tonviewer.com/EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN) | [TON Verifier](https://verifier.ton.org/UQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39igI) |
-| Collection code anchor | [`EQDYIpHPkgxZhEbk6Q9QZdWuqbFdLMJC0fYWfhWJq3hhfIZv`](https://tonviewer.com/EQDYIpHPkgxZhEbk6Q9QZdWuqbFdLMJC0fYWfhWJq3hhfIZv) | [TON Verifier](https://verifier.ton.org/UQDYIpHPkgxZhEbk6Q9QZdWuqbFdLMJC0fYWfhWJq3hhfNuq) |
-| Item code anchor | [`EQDVuzqRciQiChoU4ohKbaEAydncY3_WZNWIHnk2si22BOzY`](https://tonviewer.com/EQDVuzqRciQiChoU4ohKbaEAydncY3_WZNWIHnk2si22BOzY) | [TON Verifier](https://verifier.ton.org/UQDVuzqRciQiChoU4ohKbaEAydncY3_WZNWIHnk2si22BLEd) |
+| Factory | [`EQADqpHyfQRvWQGxPqJt6Jyu_c2oqxFZgvfdfxb4UZkCE8R9`](https://tonviewer.com/EQADqpHyfQRvWQGxPqJt6Jyu_c2oqxFZgvfdfxb4UZkCE8R9) | [TON Verifier](https://verifier.ton.org/UQADqpHyfQRvWQGxPqJt6Jyu_c2oqxFZgvfdfxb4UZkCE5m4) |
 
-The code anchors verify the shared Collection and Item code, not a specific contract state.
+The verified Factory embeds Collection code hash
+`85a44fd403473e5d74575fd606e3aac2873a46e16b944eb68e74b08604397856` and Item code hash
+`fafb9b13e3b47c3323023aeb0a9a87277ea5a756886e8a2a6438488dfdf6e349`.
 
-Factory deployed on 2026-07-19 in transaction
-[`01d89dda…39ce1a`](https://tonscan.org/tx/01d89ddabe281cd3b240be565aff7afc4498025dd41f3b859991c69bfe39ce1a).
+Factory deployed on 2026-07-20 in transaction
+[`4676bfe2…1d245c03`](https://tonscan.org/tx/4676bfe277f63a04aa25f8b04408ef1f53ff5b2b6721fcabdaf6ac691d245c03).
 
 ## Develop
 

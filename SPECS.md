@@ -2,9 +2,8 @@
 
 ## 1. Status
 
-This document defines the three non-upgradeable v5 contracts. v5 adds complete immutable metadata
-and an immutable parent-renewal policy. It is not deployed, requires new addresses and has no
-on-chain migration path.
+This document defines the three non-upgradeable v5 contracts deployed from Factory
+`EQADqpHyfQRvWQGxPqJt6Jyu_c2oqxFZgvfdfxb4UZkCE8R9`. v5 has no on-chain migration path.
 
 The protocol implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-81 DNS.
 
