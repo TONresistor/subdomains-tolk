@@ -1,6 +1,7 @@
 import "dns-utils"
 import "errors"
 import "messages"
+import "metadata"
 import "prices"
 import "storage"
 // Tier 1: one registry per parent domain. Custody/lock + mint + resolver + admin.
@@ -9,7 +10,7 @@ import "../gen/SubdomainItem.code"
 
 contract SubdomainCollection {
     author: "tolk-subdomains"
-    version: "4.0.0"
+    version: "5.0.0"
     description: "Per-domain DNS registry with claimable Linked ownership, access policy and immutable pricing."
     incomingMessages: AllowedCollectionMessage
     storage: CollectionStorage
@@ -20,7 +21,6 @@ type AllowedCollectionMessage =
     | RegisterSubdomain
     | ItemReady
     | ReportStaticData
-    | SetContent
     | SetAccessMode
     | SetAllowlistEntry
     | WithdrawFees
@@ -68,7 +68,8 @@ fun resolveMintAccess(
 }
 
 fun isParentHeartbeatDue(storage: CollectionStorage, nowTime: uint32): bool {
-    return !storage.isLinked && nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL;
+    return !storage.isLinked && storage.meta.load().autoRenewParent &&
+    nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL;
 }
 
 fun calculateMintFunding(
@@ -291,6 +292,7 @@ fun processRegistration(
     queryId: uint64,
     labelCell: Cell<RemainingBitsAndRefs>,
     setWalletToMinter: bool,
+    content: cell,
 ) {
     senderAddress.forceBasechain();
 
@@ -304,6 +306,7 @@ fun processRegistration(
     assert (label.remainingRefsCount() == 0) throw ERROR_LABEL_INVALID_CHARS;
 
     val index = label.hash();
+    assertOnchainMetadata(content);
     var policy = storage.policy.load();
     val names = storage.names.load();
     assert (!names.minted.exists(index)) throw ERROR_LABEL_TAKEN;
@@ -343,6 +346,7 @@ fun processRegistration(
             minter: senderAddress,
             label: labelCell,
             setWalletToMinter,
+            content,
         },
     });
     deployMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
@@ -728,6 +732,7 @@ fun onInternalMessage(in: InMessage) {
                 msg.queryId,
                 msg.label,
                 msg.setWalletToMinter,
+                msg.content,
             );
         }
 
@@ -756,15 +761,6 @@ fun onInternalMessage(in: InMessage) {
                 pending.queryId,
                 pending.minter,
             );
-        }
-
-        // ---------------- admin: set content ----------------
-        SetContent => {
-            assertAdmin(in.senderAddress, storage.admin);
-            var newMeta = msg.meta.load();
-            newMeta.priceConfig = storage.meta.load().priceConfig;
-            storage.meta = newMeta.toCell();
-            storage.save();
         }
 
         SetAccessMode => {
@@ -849,6 +845,7 @@ fun onInternalMessage(in: InMessage) {
             assert (
                 !storage.isLinked
             ) throw ERROR_LINKED_NO_CUSTODY;                          // the owner renews their own .ton
+            assert (storage.meta.load().autoRenewParent) throw ERROR_PARENT_RENEWAL_DISABLED;
             assert (in.valueCoins >= MIN_PARENT_FILL) throw ERROR_INSUFFICIENT_BALANCE;
             val heartbeat = createMessage({
                 bounce: true,
@@ -1051,6 +1048,14 @@ get fun get_last_parent_fill_up(): int {
     return loader.parseLocked().lastParentFillUp;
 }
 
+get fun get_auto_renew_parent(): bool {
+    val loader = startLoadingCollection();
+    if (!loader.isLocked()) {
+        return false;
+    }
+    return loader.parseLocked().meta.load().autoRenewParent;
+}
+
 get fun get_minted_count(): int {
     val loader = startLoadingCollection();
     if (!loader.isLocked()) {
@@ -1072,8 +1077,7 @@ get fun get_nft_content(_index: int, individualContent: cell): cell {
     if (!loader.isLocked()) {
         return beginCell().endCell();
     }
-    val base = loader.parseLocked().meta.load().itemContentBaseUri;
-    return beginCell().storeSlice(base.beginParse()).storeRef(individualContent).endCell();
+    return individualContent;
 }
 
 get fun get_price(charCount: int): coins {

@@ -40,8 +40,8 @@ fun parentData(parent: address): ItemNftDataReply {
 fun forkCollectionMeta(): CollectionMeta {
     return {
         priceConfig: defaultPriceConfig().toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
+        autoRenewParent: true,
+        collectionContent: beginCell().storeUint(0, BYTE_SIZE).storeBool(false).endCell(),
     };
 }
 

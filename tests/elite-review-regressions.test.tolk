@@ -181,6 +181,7 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
             queryId: 71,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
+            content: testOnchainMetadata(),
         },
     });
 
@@ -651,7 +652,7 @@ get fun `test elite review: Linked create retries an in-flight request without o
     testing.processSingleTraceStep(owner.address, first);
 
     var changedMeta = makeMeta();
-    changedMeta.collectionContent = beginCell().storeUint(1, 1).endCell();
+    changedMeta.collectionContent = testOnchainMetadataVariant();
     val changedConfig = factory.sendCreateLinkedCollection(
         owner.address,
         2,
@@ -888,6 +889,7 @@ get fun `test elite review: collection rejects 127-byte labels and unknown ops`(
         1,
         tooLong,
         true,
+        testOnchainMetadata(),
         { value: ton("100"), bounce: true },
     );
     expect(longResult).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_LONG });
@@ -902,6 +904,7 @@ get fun `test elite review: collection rejects 127-byte labels and unknown ops`(
         2,
         maxLabel,
         true,
+        testOnchainMetadata(),
         { value: ton("1"), bounce: true },
     );
     expect(maxResult).toHaveSuccessfulTx({ to: coll.address });
@@ -1004,6 +1007,7 @@ get fun `test elite review: item init authenticates sender, index and label`() {
         minter: collection.address,
         label: labelSlice("alice").toCell(),
         setWalletToMinter: false,
+        content: testOnchainMetadata(),
     };
     val fakeSender = net.send(
         attacker.address,
@@ -1146,6 +1150,7 @@ get fun `test elite review: setWalletToMinter false leaves the wallet record abs
         1,
         labelSlice(label),
         false,
+        testOnchainMetadata(),
         { value: ton("20"), bounce: true },
     );
     expect(mint).toHaveSuccessfulTx({ to: coll.address });

@@ -22,6 +22,7 @@ get fun `test elite: masterchain minter is rejected, label stays free`() {
         7,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: ton("20"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_WRONG_WORKCHAIN });
@@ -52,11 +53,8 @@ get fun `test elite: factory deploys a zero-price collection`() {
         p10: ton("0"),
         pRest: ton("0"),
     };
-    val freeMeta: CollectionMeta = {
-        priceConfig: freeGrid.toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
-    };
+    var freeMeta = makeMeta();
+    freeMeta.priceConfig = freeGrid.toCell();
     val payload = beginCell().storeRef(freeMeta.toCell()).endCell().beginParse();
 
     val res = factory.sendOwnershipAssigned(

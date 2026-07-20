@@ -63,8 +63,8 @@ struct CollectionSkeleton {
 
 struct CollectionMeta {
     priceConfig: Cell<PriceConfig>
-    collectionContent: cell  // TEP-64 offchain (collection)
-    itemContentBaseUri: cell // offchain prefix for items
+    autoRenewParent: bool
+    collectionContent: cell // immutable TEP-64 on-chain collection metadata
 }
 
 struct CollectionOrigin {
@@ -181,6 +181,7 @@ struct ItemStorageInitialized {
     ownerAddress: address
     records: Cell<DnsRecords>
     label: Cell<RemainingBitsAndRefs>
+    content: cell      // immutable complete TEP-64 on-chain item metadata
     mintedAt: uint32
     lastTouch: uint32
     validUntil: uint32 // 0 = perpetual (reserved)

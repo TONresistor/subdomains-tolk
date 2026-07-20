@@ -52,6 +52,7 @@ fun SubdomainCollection.sendRegisterSubdomain(
     queryId: uint64,
     label: RemainingBitsAndRefs,
     setWalletToMinter: bool,
+    content: cell,
     config: SendParams = {},
 ): SendResultList {
     val genericMsg = createMessage({
@@ -62,6 +63,7 @@ fun SubdomainCollection.sendRegisterSubdomain(
             queryId,
             label: label.toCell(),
             setWalletToMinter,
+            content,
         },
     });
     return net.send(from, genericMsg);
@@ -97,25 +99,6 @@ fun SubdomainCollection.sendReportStaticData(
         value: config.value,
         dest: self.address,
         body: ReportStaticData { queryId, itemIndex, collectionAddress },
-    });
-    return net.send(from, genericMsg);
-}
-
-fun SubdomainCollection.sendSetContent(
-    self,
-    from: address,
-    queryId: uint64,
-    meta: CollectionMeta,
-    config: SendParams = {},
-): SendResultList {
-    val genericMsg = createMessage({
-        bounce: config.bounce,
-        value: config.value,
-        dest: self.address,
-        body: SetContent {
-            queryId,
-            meta: meta.toCell(),
-        },
     });
     return net.send(from, genericMsg);
 }
@@ -360,6 +343,10 @@ fun SubdomainCollection.getNftAddressByIndex(self, index: int): address {
 
 fun SubdomainCollection.getLastParentFillUp(self): int {
     return net.runGetMethod(self.address, "get_last_parent_fill_up");
+}
+
+fun SubdomainCollection.getAutoRenewParent(self): bool {
+    return net.runGetMethod(self.address, "get_auto_renew_parent");
 }
 
 fun SubdomainCollection.getMintedCount(self): int {

@@ -79,13 +79,27 @@ fun makeTransferData(
     };
 }
 
-// A default CollectionMeta (default price grid, empty content). Stands in for the config the
-// dApp builds and the factory relays in the create forward payload.
+fun testOnchainMetadata(): cell {
+    return beginCell().storeUint(0, BYTE_SIZE).storeBool(false).endCell();
+}
+
+fun testOnchainMetadataVariant(): cell {
+    var fields: map<uint256, cell> = [];
+    fields.set(
+        0x82a3537ff0dbce7eec35d69edc3a189ee6f17d82f353a553f9aa96cb0be3ce89,
+        beginCell().storeUint(0, BYTE_SIZE).storeUint(1, BYTE_SIZE).endCell(),
+    );
+    var content = beginCell().storeUint(0, BYTE_SIZE);
+    content.storeDict(fields.toLowLevelDict());
+    return content.endCell();
+}
+
+// A default CollectionMeta with valid empty TEP-64 on-chain content.
 fun makeMeta(): CollectionMeta {
     return {
         priceConfig: defaultPriceConfig().toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
+        autoRenewParent: true,
+        collectionContent: testOnchainMetadata(),
     };
 }
 
@@ -142,6 +156,7 @@ fun deployLinkedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
     });
     coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
     expect(coll.getIsLinked()).toEqual(false); // not locked yet -> default false
+    expect(coll.getAutoRenewParent()).toEqual(false);
 
     val lockRes = coll.sendAny(
         masterT.address,
@@ -157,6 +172,7 @@ fun deployLinkedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
     expect(lockRes).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getAdmin()).toEqual(owner.address);
     expect(coll.getIsLinked()).toEqual(true); // self-custody mode
+    expect(coll.getAutoRenewParent()).toEqual(true);
 
     return (coll, parent, owner, user);
 }
@@ -173,6 +189,7 @@ fun mintSubdomain(
         7,
         labelSlice(label),
         true,
+        testOnchainMetadata(),
         { value, bounce: true },
     );
     val deployTx = res.findTransaction({ from: coll.address, deploy: true });

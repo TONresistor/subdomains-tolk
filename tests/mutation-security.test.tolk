@@ -53,6 +53,7 @@ fun deployInitializedItem(owner: Treasury, label: string, value: coins): Subdoma
         ownerAddress: owner.address,
         records: records.toCell(),
         label: labelSlice(label).toCell(),
+        content: testOnchainMetadata(),
         mintedAt: now,
         lastTouch: now,
         validUntil: 0,
@@ -1049,6 +1050,7 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
         minter: user.address,
         label: labelSlice(label).toCell(),
         setWalletToMinter: false,
+        content: testOnchainMetadata(),
     };
     val unminted = testing.processSingleTraceStep(
         collection.getNftAddressByIndex(labelIndex(label)),
@@ -1101,6 +1103,7 @@ get fun `test mutation: skeleton guards and getters remain total`() {
         minter: user.address,
         label: labelSlice(label).toCell(),
         setWalletToMinter: false,
+        content: testOnchainMetadata(),
     };
     val bounce = net.send(
         skeleton.getNftAddressByIndex(labelIndex(label)),
@@ -1142,6 +1145,7 @@ get fun `test mutation: collection saturates mint rollback and validates handoff
         minter: minter.address,
         label: labelSlice(label).toCell(),
         setWalletToMinter: false,
+        content: testOnchainMetadata(),
     };
     val rollback = net.send(
         collection.getNftAddressByIndex(labelIndex(label)),

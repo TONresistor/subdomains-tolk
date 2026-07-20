@@ -35,7 +35,10 @@ fun zeroPriceConfig(): PriceConfig {
     };
 }
 
-fun deployFreeCollection(isLinked: bool): (SubdomainCollection, Treasury, Treasury, Treasury) {
+fun deployFreeCollection(
+    isLinked: bool,
+    autoRenewParent: bool = true,
+): (SubdomainCollection, Treasury, Treasury, Treasury) {
     val master = newActor("free-master", ton("100"));
     val parent = newActor("free-parent", ton("100"));
     val owner = newActor("free-owner", ton("100"));
@@ -47,11 +50,9 @@ fun deployFreeCollection(isLinked: bool): (SubdomainCollection, Treasury, Treasu
         linkedAdmin: isLinked ? owner.address : master.address,
     });
     coll.deploy(master.address, { value: ton("0.05"), bounce: false });
-    val meta: CollectionMeta = {
-        priceConfig: zeroPriceConfig().toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
-    };
+    var meta = makeMeta();
+    meta.priceConfig = zeroPriceConfig().toCell();
+    meta.autoRenewParent = autoRenewParent;
     val locked = coll.sendAny(
         master.address,
         LockCollection {
@@ -120,6 +121,7 @@ get fun `test economics: under the price+deploy+buffer floor is rejected`() {
         7,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: REQUIRED - ton("0.01"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
@@ -150,6 +152,7 @@ get fun `test v4 fees: free mint accepts the exact base quote and rejects one na
         10,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: exact - 1, bounce: true },
     );
     expect(underfunded).toHaveFailedTx({
@@ -163,6 +166,7 @@ get fun `test v4 fees: free mint accepts the exact base quote and rejects one na
         11,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: exact, bounce: true },
     );
     expect(exactMint).toHaveSuccessfulTx({ to: coll.address });
@@ -189,6 +193,7 @@ get fun `test v4 fees: due Locked heartbeat adds exactly 0.01 TON to the quote`(
         20,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: exact - 1, bounce: true },
     );
     expect(underfunded).toHaveFailedTx({
@@ -202,6 +207,7 @@ get fun `test v4 fees: due Locked heartbeat adds exactly 0.01 TON to the quote`(
         21,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: exact, bounce: true },
     );
     expect(exactMint).toHaveSuccessfulTx({ to: coll.address });
@@ -226,10 +232,46 @@ get fun `test v4 fees: Linked mint never charges or sends the parent heartbeat`(
         30,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: exact, bounce: true },
     );
     expect(minted).toHaveSuccessfulTx({ to: coll.address });
     expect(minted.findTransaction({ from: coll.address, to: parent.address })).toEqual(null);
+}
+
+get fun `test v5 fees: Locked no-renew parent never charges or sends a heartbeat`() {
+    testing.setNow(1700000000);
+    val (coll, parent, _owner, user) = deployFreeCollection(false, false);
+    val lastFill = coll.getLastParentFillUp();
+    testing.setNow(1700000000 + PARENT_HEARTBEAT_INTERVAL * 10);
+
+    val exact = ITEM_DEPLOY_COST + MINT_FEE_BUFFER;
+    expect(coll.getAutoRenewParent()).toEqual(false);
+    expect(coll.getMintQuote(user.address, 5).requiredValue).toEqual(exact);
+
+    val minted = coll.sendRegisterSubdomain(
+        user.address,
+        40,
+        labelSlice("alice"),
+        true,
+        testOnchainMetadata(),
+        { value: exact, bounce: true },
+    );
+    expect(minted).toHaveSuccessfulTx({ to: coll.address });
+    expect(minted.findTransaction({ from: coll.address, to: parent.address })).toEqual(null);
+    expect(coll.getLastParentFillUp()).toEqual(lastFill);
+
+    val explicit = coll.sendFillUpParent(
+        user.address,
+        41,
+        { value: MIN_PARENT_FILL, bounce: true },
+    );
+    expect(explicit).toHaveFailedTx({
+        to: coll.address,
+        exitCode: ERROR_PARENT_RENEWAL_DISABLED,
+    });
+    expect(explicit.findTransaction({ from: coll.address, to: parent.address })).toEqual(null);
+    expect(coll.getLastParentFillUp()).toEqual(lastFill);
 }
 
 get fun `test v4 fees: maximum label mints at the same exact base funding`() {
@@ -248,6 +290,7 @@ get fun `test v4 fees: maximum label mints at the same exact base funding`() {
         50,
         label.beginParse(),
         true,
+        testOnchainMetadata(),
         { value: exact, bounce: true },
     );
     expect(minted).toHaveSuccessfulTx({ to: coll.address });

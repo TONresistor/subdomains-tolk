@@ -290,11 +290,8 @@ get fun `test linked: factory rejects an invalid price grid`() {
         p10: ton("0.5"),
         pRest: ton("0.6"), // non-monotonic: pRest exceeds p10
     };
-    val badMeta: CollectionMeta = {
-        priceConfig: badGrid.toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
-    };
+    var badMeta = makeMeta();
+    badMeta.priceConfig = badGrid.toCell();
 
     val res = factory.sendCreateLinkedCollection(
         owner.address,

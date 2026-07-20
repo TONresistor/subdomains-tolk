@@ -1,5 +1,5 @@
 // Mint a subdomain on a locked collection.
-// Run: COLLECTION_ADDRESS=... LABEL=alice acton script scripts/mint.tolk
+// Run with any complete TEP-64 on-chain metadata cell.
 import "@acton/env"
 import "@acton/io"
 import "@acton/emulation/network"
@@ -13,9 +13,10 @@ fun main() {
 
     val collectionAddress: address? = env("COLLECTION_ADDRESS");
     val label: string? = env("LABEL");
+    val content: cell? = env("CONTENT_BOC");
 
-    if (collectionAddress == null || label == null) {
-        println("Set COLLECTION_ADDRESS and LABEL.");
+    if (collectionAddress == null || label == null || content == null) {
+        println("Set COLLECTION_ADDRESS, LABEL and CONTENT_BOC.");
         return;
     }
 
@@ -43,6 +44,7 @@ fun main() {
         1,
         label!.beginParse(),
         true,
+        content!,
         { value: quote.requiredValue, bounce: true },
     );
     if (res.waitForFirstTransaction() == null) {

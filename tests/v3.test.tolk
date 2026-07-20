@@ -113,6 +113,7 @@ get fun `test v3: zero protocol pricing mints with execution funding only`() {
         2,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: ITEM_DEPLOY_COST + MINT_FEE_BUFFER, bounce: true },
     );
     expect(minted).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -141,6 +142,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         2,
         labelSlice("denied"),
         true,
+        testOnchainMetadata(),
         { value: ton("10"), bounce: true },
     );
     expect(denied).toHaveFailedTx({ to: collection.address, exitCode: ERROR_MINT_NOT_ALLOWED });
@@ -167,6 +169,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         4,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: ton("5.1"), bounce: true },
     );
     expect(first).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -177,6 +180,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         5,
         labelSlice("bobby"),
         true,
+        testOnchainMetadata(),
         { value: ton("5.1"), bounce: true },
     );
     expect(second).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -214,6 +218,7 @@ get fun `test v3: admin-only policy blocks users but not the admin`() {
         2,
         labelSlice("owner"),
         true,
+        testOnchainMetadata(),
         { value: ton("5.1"), bounce: true },
     );
     expect(adminMint).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -230,6 +235,7 @@ get fun `test v3: lost ItemReady is finalized through authenticated static data`
             queryId: 88,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
+            content: testOnchainMetadata(),
         },
     });
     val registerStep = testing.processSingleTraceStep(user.address, request);
@@ -438,6 +444,7 @@ get fun `test v3: item readiness authenticates sender and pending receipt`() {
             queryId: 10,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, request);
@@ -508,6 +515,7 @@ get fun `test v3: pending label cannot be bypassed`() {
             queryId: 3,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, pendingRequest);
@@ -516,6 +524,7 @@ get fun `test v3: pending label cannot be bypassed`() {
         4,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: ton("6"), bounce: true },
     );
     expect(duplicate).toHaveFailedTx({ to: collection.address, exitCode: ERROR_LABEL_TAKEN });
@@ -533,6 +542,7 @@ get fun `test v3: static-data recovery authenticates sender and collection`() {
             queryId: 10,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, request);
@@ -593,6 +603,7 @@ get fun `test v3: ConfirmMint requires pending state and caller funding`() {
             queryId: 2,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, request);
@@ -707,6 +718,7 @@ get fun `test v3: item bounce keeps allowlist membership and clears pending mint
             queryId: 3,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
+            content: testOnchainMetadata(),
         },
     });
     val mintStep = testing.processSingleTraceStep(user.address, request);

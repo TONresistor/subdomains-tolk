@@ -13,6 +13,7 @@ get fun `test register: insufficient value is rejected`() {
         1,
         labelSlice("alice"),
         true,
+        testOnchainMetadata(),
         { value: ton("2"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
@@ -25,6 +26,7 @@ get fun `test register: too-short label is rejected`() {
         1,
         labelSlice("bob"),
         true, // 3 chars < 4
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_SHORT });
@@ -37,6 +39,7 @@ get fun `test register: invalid characters are rejected`() {
         1,
         labelSlice("hello!"),
         true, // '!' invalid
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
@@ -64,6 +67,7 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         1,
         labelSlice("admin"),
         true,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(userTry).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_RESERVED });
@@ -73,6 +77,7 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         2,
         labelSlice("admin"),
         true,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(adminTry).toHaveSuccessfulTx({ to: coll.address });
@@ -86,6 +91,7 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         5,
         labelSlice("release"),
         true,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(releasedMint).toHaveSuccessfulTx({ to: coll.address });

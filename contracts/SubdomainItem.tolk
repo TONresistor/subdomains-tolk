@@ -6,7 +6,7 @@ import "storage"
 
 contract SubdomainItem {
     author: "tolk-subdomains"
-    version: "4.0.0"
+    version: "5.0.0"
     description: "Subdomain NFT item (TEP-62) holding its own DNS records."
     incomingMessages: AllowedItemMessage
     storage: ItemStorageInitialized
@@ -125,6 +125,7 @@ fun onInternalMessage(in: InMessage) {
             ownerAddress: init.minter,
             records: records.toCell(),
             label: init.label,
+            content: init.content,
             mintedAt: now,
             lastTouch: now,
             validUntil: 0,
@@ -227,7 +228,7 @@ get fun get_nft_data(): ItemNftDataReply {
         index: st.index,
         collectionAddress: st.collectionAddress,
         ownerAddress: st.ownerAddress,
-        content: st.label as cell,
+        content: st.content,
     };
 }
 

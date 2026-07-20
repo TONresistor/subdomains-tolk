@@ -1,5 +1,6 @@
 import "errors"
 import "messages"
+import "metadata"
 import "prices"
 import "storage"
 // Tier 0: global, free, permissionless, non-upgradeable.
@@ -55,7 +56,7 @@ fun FactoryStorage.save(self) {
 
 contract SubdomainFactory {
     author: "tolk-subdomains"
-    version: "4.0.0"
+    version: "5.0.0"
     description: "Global factory for permanent Locked and self-custody Linked subdomain collections."
     incomingMessages: AllowedFactoryMessage
     storage: FactoryStorage
@@ -463,8 +464,10 @@ fun onInternalMessage(in: InMessage) {
                 metaCell = payload.loadRef();
                 try {
                     val parsed = CollectionMeta.fromCell(metaCell);
-                    val grid = parsed.priceConfig.load();
-                    metaValid = grid.isValid();
+                    metaValid = parsed.priceConfig.load().isValid();
+                    if (metaValid) {
+                        assertOnchainMetadata(parsed.collectionContent);
+                    }
                 } catch {
                     metaValid = false;
                 }
@@ -525,8 +528,9 @@ fun onInternalMessage(in: InMessage) {
             // Bind the deterministic address and config to its creator.
             assert (msg.admin == in.senderAddress) throw ERROR_NOT_ADMIN;
 
-            val grid = msg.meta.load().priceConfig.load();
-            assert (grid.isValid()) throw ERROR_UNKNOWN_OP;
+            val meta = msg.meta.load();
+            assert (meta.priceConfig.load().isValid()) throw ERROR_UNKNOWN_OP;
+            assertOnchainMetadata(meta.collectionContent);
             assert (
                 in.valueCoins >= COLLECTION_DEPLOY_VALUE + FACTORY_GAS_MARGIN
             ) throw ERROR_INSUFFICIENT_BALANCE;

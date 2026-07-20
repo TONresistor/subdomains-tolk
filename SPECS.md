@@ -1,15 +1,10 @@
-# TON Subdomains v4.0.0 Specification
+# TON Subdomains v5.0.0 Specification
 
 ## 1. Status
 
-This document defines the three non-upgradeable v4 contracts deployed from Factory
-`EQAAzQese032pNIO5T-eOxb5bDjdGJ1m0-iutqd86ZH39nXN`.
-
-The v5 client integration reuses this exact bytecode for wallet-owned Telegram Username NFT parents
-in Linked mode. No new Factory or contract migration is required.
-
-Previous mainnet deployments are private tests and are not compatibility targets. The v4 release
-deploys new addresses without an on-chain migration path.
+This document defines the three non-upgradeable v5 contracts. v5 adds complete immutable metadata
+and an immutable parent-renewal policy. It is not deployed, requires new addresses and has no
+on-chain migration path.
 
 The protocol implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-81 DNS.
 
@@ -17,7 +12,7 @@ The protocol implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-8
 
 ```text
 SubdomainFactory
-  -> SubdomainCollection per parent DNS NFT
+  -> SubdomainCollection per supported parent NFT
        -> SubdomainItem per sha256(raw_label)
 ```
 
@@ -27,12 +22,20 @@ SubdomainFactory
 - No contract has an upgrade authority.
 - Factory has no admin, protocol fee or withdrawal path.
 
+Contracts are parent-NFT agnostic. Official clients support `.ton` DNS NFTs and wallet-owned
+Telegram Username NFTs from the official Telemint collection. Clients reject Username NFTs in an
+active auction before creation.
+
 ## 3. Custody modes
 
 ### Locked
 
 The parent NFT is transferred through Factory into Collection custody. Collection permanently owns
-the parent, pins itself as `dns_next_resolver`, renews the parent and forbids parent rescue.
+the parent, pins itself as `dns_next_resolver` and forbids parent rescue.
+
+`autoRenewParent` is selected at creation and immutable. When enabled, minting renews a due parent
+at most once per 24 hours. Official clients enable it for `.ton` and disable it for `.t.me`, whose
+Username NFTs do not expire. `FillUpParent` is rejected when the flag is disabled.
 
 ### Linked
 
@@ -96,13 +99,14 @@ Base required mint value is:
 effectivePrice + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
 ```
 
-A free mint requires `0.07 TON`. A Locked mint adds `0.01 TON` only when its once-per-day parent
-heartbeat is due. `get_mint_quote` includes that heartbeat when due. These amounts fund execution
-and Item creation, not protocol revenue.
+A free mint requires `0.07 TON`. A Locked mint adds `0.01 TON` only when `autoRenewParent` is enabled
+and its once-per-day parent heartbeat is due. Linked collections and Locked `.t.me` collections do
+not charge or send a heartbeat. `get_mint_quote` includes the heartbeat when due. These amounts fund
+execution and Item creation, not protocol revenue.
 
 ## 6. Mint lifecycle and accounting
 
-1. Collection validates label, policy, price and funding.
+1. Collection validates label, metadata, policy, price and funding.
 2. Collection reserves `PendingMint`.
 3. Collection deploys the deterministic Item with a rich bounce.
 4. Item persists its state and sends authenticated `ItemReady`.
@@ -115,6 +119,16 @@ On deployment bounce, Collection removes the pending label and refunds recoverab
 
 Withdrawals are limited by both `withdrawableRevenue` and the physical balance above operational
 reserves. Top-ups, parent return surplus and execution funding are not automatically revenue.
+
+### Metadata
+
+`CollectionMeta` contains immutable pricing, `autoRenewParent` and complete TEP-64 collection
+content.
+`RegisterSubdomain` carries complete TEP-64 Item content, which the Item stores immutably.
+
+Content uses on-chain tag `0`, is limited to 32 cells and 16,384 bits, and may contain text,
+attributes and client-chosen `image` or `uri` values. Contracts impose no URI scheme, host, metadata
+signer, application domain or gateway. TEP-81 DNS records remain separately editable.
 
 ## 7. Storage
 
@@ -141,6 +155,10 @@ CollectionStorage {
   lastParentFillUp, meta, names, policy
 }
 
+CollectionMeta {
+  priceConfig, autoRenewParent, collectionContent
+}
+
 CollectionNames {
   reserved, minted, mintedCount
 }
@@ -153,8 +171,8 @@ CollectionPolicyState {
 
 Rejected returns never retain caller-supplied metadata.
 
-Item storage remains TEP-62 compatible and contains index, Collection, owner, records, raw label and
-timestamps.
+Item storage remains TEP-62 compatible and contains index, Collection, owner, records, raw label,
+immutable metadata content and timestamps.
 
 ## 8. Contract interfaces
 
@@ -173,11 +191,10 @@ Collection messages:
 
 | Opcode | Message | Authority |
 |---|---|---|
-| `0x49278399` | `RegisterSubdomain` | Policy-authorized minter |
+| `0x49278399` | `RegisterSubdomain` with immutable Item content | Policy-authorized minter |
 | `0x49524459` | `ItemReady` | Exact derived Item |
 | `0x41434353` | `SetAccessMode` | Admin |
 | `0x414c4c57` | `SetAllowlistEntry` | Admin |
-| `0x7969d64e` | `SetContent` | Admin, pricing preserved |
 | `0xccef6e14` | `SetLabelReserved` | Admin |
 | `0x1e4b7535` | `WithdrawFees` | Locked admin only |
 | `0x2b8af82e` | `TransferAdmin` | Locked admin only |
@@ -189,8 +206,8 @@ Collection messages:
 | `0x52505254` | `RetryParentReturn` | Anyone, caller-funded |
 | `0x434d494e` | `ConfirmMint` | Anyone, caller-funded |
 
-Collection getters cover TEP-62 and TEP-66 data, DNS resolution, addresses, custody mode, immutable
-pricing, access policy, mint state, revenue and pending parent return.
+Collection getters cover TEP-62 and TEP-66 data, DNS resolution, addresses, custody mode,
+`autoRenewParent`, immutable pricing, access policy, mint state, revenue and pending parent return.
 
 Item messages are standard TEP-62 `TransferOwnership` and `GetStaticData`, plus TEP-81
 `ChangeDnsRecord` and `EditContent`. Item getters expose NFT data, editor, raw label, timestamps and
@@ -212,7 +229,7 @@ Item messages are standard TEP-62 `TransferOwnership` and `GetStaticData`, plus 
 | `RESOLVER_PIN_VALUE` | `0.01 TON` |
 | `RESOLVER_PIN_FUND` | `0.02 TON` |
 | `MIN_PARENT_FILL` | `0.01 TON` |
-| `PARENT_HEARTBEAT_AMOUNT` | `0.01 TON`, at most once per 24 hours through mint |
+| `PARENT_HEARTBEAT_AMOUNT` | `0.01 TON`, at most once per 24 hours through mint when enabled |
 | `MIN_PARENT_RETURN_VALUE` | `0.01 TON` |
 | `MIN_CONFIRM_MINT_VALUE` | `0.005 TON` |
 | `HANDOFF_RETRY_VALUE` | `0.10 TON` |
@@ -240,3 +257,6 @@ to Factory. Recovery sends at most `0.135 TON`; unused value is refunded where t
     storage.
 14. Mainnet release requires reproducible BOCs, TON Verifier publication, full tests, coverage and
     mutation gates, pinned deployment values and atomic indexer/frontend cutover.
+15. Collection and Item metadata is chosen at creation and cannot be changed afterward.
+16. Linked collections never renew the parent. Locked collections renew it only when their immutable
+    `autoRenewParent` flag is enabled.
