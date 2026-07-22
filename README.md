@@ -1,12 +1,10 @@
 # TON Subdomains
 
-Anyone who owns a `.ton` domain or a wallet-owned Telegram Username NFT can open a subdomain
-registry. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
+Anyone who owns a `.ton` domain or a wallet-owned Telegram Username NFT can open a subdomain registry. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
 
 Creators choose one of two explicit guarantees. **Locked** transfers the parent NFT into the
 collection and freezes resolution permanently. **Linked** keeps the parent in the owner's wallet,
-supports trustless owner claims through a parent NFT round trip, and can explicitly convert one-way
-to Locked. All contracts are **non-upgradeable** (`embed_code`).
+supports trustless owner claims through a parent NFT round trip, and can explicitly convert one-way to Locked. All contracts are **non-upgradeable** (`embed_code`).
 
 > Written in **Tolk** with the **[Acton](https://github.com/ton-blockchain/acton)** toolchain.
 
@@ -16,9 +14,9 @@ Three tiers, each non-upgradeable:
 
 | Tier | Contract | Role |
 |------|----------|------|
-| 0 | `SubdomainFactory` | One global, free, permissionless deployer. Derives collections and retains phase-aware recovery state until deployment and custody are positively acknowledged. |
-| 1 | `SubdomainCollection` | One per domain. Custody, Linked claims, access policy, immutable pricing, mint and DNS routing. |
-| 2 | `SubdomainItem` | One per subdomain. TEP-62 NFT holding DNS records, `dnsresolve`, transfer. |
+| 0 | `SubdomainFactory` | Global permissionless deployer and recovery coordinator. |
+| 1 | `SubdomainCollection` | One Locked per parent; Linked per parent and creator. Manages custody, minting, revenue and DNS. |
+| 2 | `SubdomainItem` | One transferable NFT per subdomain with editable DNS records. |
 
 ## How it works
 
@@ -37,8 +35,7 @@ Three tiers, each non-upgradeable:
 
 ## Contract specification
 
-See [`SPECS.md`](SPECS.md) for the normative storage layouts, messages, getters, permissions,
-economics, DNS behavior, recovery rules and invariants of all three contracts.
+See [`SPECS.md`](SPECS.md) for protocol behavior, ABI opcodes and transaction values.
 
 ## Deployment (mainnet)
 

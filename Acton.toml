@@ -1,6 +1,6 @@
 [package]
 name = "tolk-subdomains"
-description = "Subdomain-as-a-Service on TON: factory-of-factories (Tolk/Acton)."
+description = "Permissionless TON subdomain registries in Tolk."
 version = "5.0.0"
 license = "MIT"
 

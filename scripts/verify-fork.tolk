@@ -1,7 +1,7 @@
 // Fork verification against a real mainnet .ton DnsItem, offline with no broadcast.
 // Run: TONCENTER_MAINNET_API_KEY=... acton script scripts/verify-fork.tolk --fork-net mainnet
 //
-// Checks the standard resolver category, then exercises v4 CLAIM, CONVERT_LOCKED and the complete
+// Checks the standard resolver category, then exercises CLAIM, CONVERT_LOCKED and the complete
 // fee-minimized Locked Factory flow with the canonical parent contract and no broadcast.
 import "@acton/io"
 import "@acton/emulation/network"
@@ -18,7 +18,7 @@ struct DnsReply {
     record: cell?
 }
 
-const RAW_NEXT_RESOLVER = "dns_next_resolver".toBase256() // the buggy v6 key, for contrast
+const RAW_NEXT_RESOLVER = "dns_next_resolver".toBase256() // legacy raw key, for contrast
 
 fun dotSlice(): slice {
     return beginCell().storeUint(0, 8).endCell().beginParse();
@@ -107,7 +107,7 @@ fun main() {
         resolveCat(parent, dotSlice(), CAT_DNS_NEXT_RESOLVER) != null ? "FOUND" : "null  <- RED",
     );
     println(
-        "next_resolver under raw bytes (v6 bug) : {}",
+        "next_resolver under raw bytes (legacy) : {}",
         resolveCat(parent, dotSlice(), RAW_NEXT_RESOLVER) != null
             ? "FOUND <- where the broken pin sits"
             : "null",
@@ -117,7 +117,7 @@ fun main() {
     val body = beginCell()
         .storeUint(0x4eb1f0f9, 32) // op::change_dns_record (real .ton item)
         .storeUint(1, 64) // query_id
-        .storeUint(CAT_DNS_NEXT_RESOLVER, 256) // <- OUR v7 key (sha256), the only thing we fixed
+        .storeUint(CAT_DNS_NEXT_RESOLVER, 256) // standard sha256 category
         .storeRef(owner.toNextResolver()) // value: dns_next_resolver -> collection
         .endCell();
 
@@ -142,7 +142,7 @@ fun main() {
         deeper.record != null ? "next_resolver returned <- GREEN" : "null",
     );
 
-    val master = testing.treasury("fork-v4-master");
+    val master = testing.treasury("fork-master");
     testing.topUp(master.address, ton("10"));
     val collection = SubdomainCollection.fromStorage({
         master: master.address,
@@ -180,7 +180,7 @@ fun main() {
     println("CONVERT_LOCKED at 0.01 TON           : collection owns parent <- GREEN");
 
     // Restore the forked NFT to its original owner, then run the complete real DnsItem -> Factory
-    // -> Collection -> DnsItem -> Collection handoff with the exact v4 forward minimum.
+    // -> Collection -> DnsItem -> Collection handoff with the current forward minimum.
     returnParent(parent, collection.address, owner, 4);
     assert (parentData(parent).ownerAddress! == owner) throw 1010;
 
