@@ -1,6 +1,6 @@
 # TON Subdomains
 
-Anyone who owns a `.ton` domain or a wallet-owned Telegram Username NFT can open a subdomain registry. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
+Anyone who owns a `.ton` domain or a wallet-owned `.t.me` Telegram Username NFT can create DNS subdomains. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
 
 Creators choose one of two explicit guarantees. **Locked** transfers the parent NFT into the
 collection and freezes resolution permanently. **Linked** keeps the parent in the owner's wallet,
