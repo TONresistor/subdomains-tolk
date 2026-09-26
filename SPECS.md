@@ -9,16 +9,10 @@ It implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-81 DNS. Con
 
 ## Architecture
 
-| Contract | Role |
-|---|---|
-| `SubdomainFactory` | Permissionless deployer with no admin, protocol fee or withdrawal path |
-| `SubdomainCollection` | Registry, custody, access, pricing, minting, revenue and DNS routing |
-| `SubdomainItem` | Transferable subdomain NFT with owner-managed DNS records |
+Factory embeds Collection code; Collection embeds Item code. Addresses are derived from StateInit.
+Locked Collections are keyed by parent; Linked Collections by parent and original creator.
 
-Factory embeds Collection code, and Collection embeds Item code. StateInit deterministically derives each address. No contract has an upgrade authority.
-
-Exact message and storage layouts are defined in [`contracts/messages.tolk`](contracts/messages.tolk)
-and [`contracts/storage.tolk`](contracts/storage.tolk).
+Message layouts: [messages.tolk](contracts/messages.tolk). Storage: [storage.tolk](contracts/storage.tolk).
 
 ## Collection modes
 
@@ -35,6 +29,7 @@ and [`contracts/storage.tolk`](contracts/storage.tolk).
 The parent is transferred through Factory to Collection and can never be rescued. Collection may proxy parent DNS edits, except changes to `dns_next_resolver`.
 
 `autoRenewParent` is immutable. When enabled, a due mint sends `0.01 TON` to the parent at most once per 24 hours. Project clients enable it for `.ton` and disable it for non-expiring `.t.me` parents.
+There is no autonomous keeper in the contracts: anyone may also fund `FillUpParent`.
 
 ### Linked
 
@@ -80,9 +75,9 @@ The admin can change access mode, allowlist entries and reserved labels. Reserve
 
 ### Metadata
 
-Collection and Item metadata is complete, immutable TEP-64 on-chain content with tag `0`. Each content cell tree is limited to 32 cells and 16,384 bits.
-
-The creating client chooses all fields and URI schemes. `image` or `uri` may point to IPFS, Arweave, HTTPS or another location. The contracts require no host, gateway, signer or backend.
+Collection and Item metadata is immutable TEP-64 on-chain content with tag `0`, limited to 32 cells
+and 16,384 bits per content tree. Clients choose the fields and URI schemes; contracts validate
+the container structure and size.
 
 ## Minting and revenue
 
@@ -101,16 +96,24 @@ Withdrawals cannot exceed accounted revenue or the balance available above opera
 
 Top-ups and execution funding do not become revenue. Royalties are zero.
 
-## Public operations
+Factory and Collection recovery messages are caller-funded and authenticate the sender and pending operation.
 
-| Contract | Operations |
-|---|---|
-| Factory | Create Locked, create Linked, retry a pending Collection deployment, derive Collection addresses |
-| Collection | Mint, quote, manage access and reserved labels, withdraw or transfer admin in Locked, claim or convert Linked, maintain the parent, rescue unrelated NFTs, recover pending mints or parent returns |
-| Item | Transfer ownership, edit DNS records, resolve DNS, read NFT data and timestamps |
+## Get methods
 
-Factory and Collection recovery messages are caller-funded and authenticate the expected sender,
-address and persisted operation before changing state.
+Generated typed wrappers are committed in [`wrappers/`](wrappers/).
+
+- **Factory:** `get_collection_address`, `get_linked_collection_address`.
+- **Collection standards:** `get_collection_data`, `get_nft_address_by_index`,
+  `get_nft_content`, `royalty_params`, `dnsresolve`.
+- **Collection state:** `get_parent_domain`, `get_admin`, `get_linked_admin`, `get_is_linked`,
+  `is_locked`, `get_min_chars`, `get_price`, `get_access_mode`, `get_is_allowlisted`,
+  `get_mint_quote`, `get_minted_count`, `get_is_mint_pending`, `get_withdrawable_revenue`,
+  `get_auto_renew_parent`, `get_last_parent_fill_up`, `get_parent_return`.
+- **Item:** `get_nft_data`, `get_editor`, `get_domain`, `get_minted_at`, `get_last_touch`,
+  `get_valid_until`, `dnsresolve`.
+
+Exact return structs are defined in [`contracts/storage.tolk`](contracts/storage.tolk). Canonical
+exit codes are defined in [`contracts/errors.tolk`](contracts/errors.tolk).
 
 ## ABI opcodes
 

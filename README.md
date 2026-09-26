@@ -1,41 +1,34 @@
 # TON Subdomains
 
-Anyone who owns a `.ton` domain or a wallet-owned `.t.me` Telegram Username NFT can create DNS subdomains. Each subdomain is a tradeable **TEP-62 NFT** that resolves on-chain via **TEP-81 DNS**.
+Permissionless subdomain registries for TON, written in Tolk with [Acton](https://github.com/ton-blockchain/acton).
+Project clients support `.ton` domains and collectibles `.t.me` Telegram Username NFTs outside active auctions.
+Each subdomain is a transferable TEP-62 NFT with owner-managed TEP-81 DNS records.
 
-Creators choose one of two explicit guarantees. **Locked** transfers the parent NFT into the
-collection and freezes resolution permanently. **Linked** keeps the parent in the owner's wallet,
-supports trustless owner claims through a parent NFT round trip, and can explicitly convert one-way to Locked. All contracts are **non-upgradeable** (`embed_code`).
+## Contracts
 
-> Written in **Tolk** with the **[Acton](https://github.com/ton-blockchain/acton)** toolchain.
+| Contract | Role |
+|---|---|
+| `SubdomainFactory` | Deploys Collections; no admin or protocol fee |
+| `SubdomainCollection` | Manages a parent domain, minting, revenue and DNS routing |
+| `SubdomainItem` | Subdomain NFT and its DNS records |
 
-## Architecture
+All contracts are non-upgradeable. Prices and TEP-64 metadata are fixed at creation.
+Minting can be public, allowlist-only or admin-only. NFT royalties are zero.
 
-Three tiers, each non-upgradeable:
+## Collection modes
 
-| Tier | Contract | Role |
-|------|----------|------|
-| 0 | `SubdomainFactory` | Global permissionless deployer and recovery coordinator. |
-| 1 | `SubdomainCollection` | One Locked per parent; Linked per parent and creator. Manages custody, minting, revenue and DNS. |
-| 2 | `SubdomainItem` | One transferable NFT per subdomain with editable DNS records. |
+| | Linked | Locked |
+|---|---|---|
+| Parent NFT | Stays in its owner's wallet | Held permanently by Collection |
+| DNS link | Parent owner can set or remove it | Collection pins itself as resolver |
+| Admin | A new parent owner can claim control | Current admin may transfer the role |
+| Conversion | Can become Locked | Final |
 
-## How it works
+Locked creates one Collection per parent; Linked creates one per parent and original creator.
+Parent validity still matters: `.ton` requires renewal. When enabled in Locked mode, renewal is
+funded by minting or a public call; there is no automatic background service.
 
-- **Create.** `.ton` and `.t.me` parents support Locked or Linked. Locked keeps the parent in the
-  Collection permanently. Linked keeps it in the owner's wallet and uses its `next_resolver` record.
-- **Mint.** A label becomes a tradeable TEP-62 NFT. Minting can be public, allowlist-only or
-  admin-only, with immutable length-based pricing that may be free.
-- **Resolve.** The Collection routes `sha256(label)` to the NFT, which serves its TEP-81 DNS records.
-- **Linked ownership.** A new parent owner can claim the Collection by sending the parent through it
-  with `0.01 TON`. They become admin, receive available revenue and get the parent back. Linked can
-  also convert permanently to Locked.
-- **Renewal.** Locked `.ton` collections renew their parent when needed. Telegram Username NFTs do
-  not expire, so Locked `.t.me` collections never send a renewal heartbeat.
-- **Metadata.** Each Collection and Item stores complete immutable TEP-64 metadata. Text and
-  attributes are on-chain; `image` and `uri` may use any URI chosen by the creating client.
-
-## Contract specification
-
-See [`SPECS.md`](SPECS.md) for protocol behavior, ABI opcodes and transaction values.
+See [SPECS.md](SPECS.md) for protocol rules, transaction values and the ABI.
 
 ## Deployment (mainnet)
 
@@ -50,7 +43,9 @@ The verified Factory embeds Collection code hash
 Factory deployed on 2026-07-20 in transaction
 [`4676bfe2…1d245c03`](https://tonscan.org/tx/4676bfe277f63a04aa25f8b04408ef1f53ff5b2b6721fcabdaf6ac691d245c03).
 
-## Develop
+## Development
+
+Requires Acton `1.1.0`.
 
 ```bash
 acton build
@@ -59,8 +54,9 @@ acton check
 acton fmt --check
 ```
 
-The frontend dApp lives in a separate repository.
+[CI](.github/workflows/acton.yml) also checks wrappers, coverage, critical mutations and mainnet-fork compatibility.
+Deployment and recovery scripts are in [scripts/](scripts/). The frontend is maintained separately.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+[MIT](LICENSE).
