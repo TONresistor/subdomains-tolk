@@ -87,7 +87,7 @@ fun expectLinkedMetadataFailure(
         parent,
         owner,
         meta,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(result).toHaveFailedTx({ to: factory.address, exitCode });
 }
@@ -156,7 +156,7 @@ get fun `test v5 metadata: arbitrary collection content is accepted and immutabl
     val owner = newActor("metadata-factory-owner");
     val parent = newActor("metadata-factory-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     var meta = makeMeta();
     meta.collectionContent = testOnchainMetadataVariant();
@@ -166,7 +166,7 @@ get fun `test v5 metadata: arbitrary collection content is accepted and immutabl
         parent.address,
         owner.address,
         meta,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(created).toHaveSuccessfulTx({ to: factory.address });
 
@@ -181,7 +181,7 @@ get fun `test v5 metadata: near-limit collection content deploys at exact fundin
     val linkedParent = newActor("metadata-exact-linked-parent");
     val lockedParent = newActor("metadata-exact-locked-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     var meta = makeMeta();
     meta.collectionContent = nearLimitMetadata();
@@ -221,7 +221,7 @@ get fun `test v5 metadata: independent frontends can mint different immutable co
         labelSlice("alice"),
         true,
         firstContent,
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     val firstDeploy = first.findTransaction({ from: collection.address, deploy: true });
     expect(firstDeploy).toBeNotNull();
@@ -232,7 +232,7 @@ get fun `test v5 metadata: independent frontends can mint different immutable co
         labelSlice("bobby"),
         true,
         secondContent,
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     val secondDeploy = second.findTransaction({ from: collection.address, deploy: true });
     expect(secondDeploy).toBeNotNull();
@@ -292,7 +292,7 @@ get fun `test v5 metadata: invalid and oversized item content is rejected`() {
         labelSlice("alice"),
         true,
         beginCell().endCell(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(missingTag).toHaveFailedTx({
         to: collection.address,
@@ -305,7 +305,7 @@ get fun `test v5 metadata: invalid and oversized item content is rejected`() {
         labelSlice("bobby"),
         true,
         beginCell().storeUint(1, BYTE_SIZE).endCell(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(offchain).toHaveFailedTx({
         to: collection.address,
@@ -318,7 +318,7 @@ get fun `test v5 metadata: invalid and oversized item content is rejected`() {
         labelSlice("carol"),
         true,
         oversizedMetadata(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(oversized).toHaveFailedTx({
         to: collection.address,
@@ -331,7 +331,7 @@ get fun `test v5 metadata: invalid and oversized item content is rejected`() {
         labelSlice("david"),
         true,
         bitHeavyMetadata(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(bitHeavy).toHaveFailedTx({
         to: collection.address,
@@ -343,7 +343,7 @@ get fun `test v5 metadata: factory rejects invalid collection content`() {
     val owner = newActor("metadata-invalid-owner");
     val parent = newActor("metadata-invalid-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     expectLinkedMetadataFailure(
         factory,

@@ -13,11 +13,11 @@ import "test-utils"
 
 get fun `test price: tiers vary by label length`() {
     val (coll, _parent, _owner, _user) = deployLockedCollection();
-    expect(coll.getPrice(4)).toEqual(ton("10"));
-    expect(coll.getPrice(6)).toEqual(ton("4"));
-    expect(coll.getPrice(9)).toEqual(ton("1"));
-    expect(coll.getPrice(11)).toEqual(ton("0.1"));
-    expect(coll.getPrice(50)).toEqual(ton("0.1")); // 11+ flat
+    expect(coll.getPrice(4)).toEqual(grams("10"));
+    expect(coll.getPrice(6)).toEqual(grams("4"));
+    expect(coll.getPrice(9)).toEqual(grams("1"));
+    expect(coll.getPrice(11)).toEqual(grams("0.1"));
+    expect(coll.getPrice(50)).toEqual(grams("0.1")); // 11+ flat
 }
 
 get fun `test metadata: collection content is immutable after deployment`() {
@@ -27,11 +27,11 @@ get fun `test metadata: collection content is immutable after deployment`() {
         owner.address,
         1,
         ACCESS_ADMIN_ONLY,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getCollectionData().content.hash()).toEqual(before);
-    expect(coll.getPrice(5)).toEqual(ton("5"));
+    expect(coll.getPrice(5)).toEqual(grams("5"));
 }
 
 // ----------------------------------------------------------------- admin ops
@@ -40,10 +40,10 @@ get fun `test admin: withdraw_fees pays the admin, non-admin rejected`() {
     val (coll, _parent, owner, user) = deployLockedCollection();
     mintSubdomain(coll, user, "alice"); // collection now holds the price as revenue
 
-    val bad = coll.sendWithdrawFees(user.address, 1, 0, { value: ton("1"), bounce: true });
+    val bad = coll.sendWithdrawFees(user.address, 1, 0, { value: grams("1"), bounce: true });
     expect(bad).toHaveFailedTx({ to: coll.address, exitCode: ERROR_NOT_ADMIN });
 
-    val res = coll.sendWithdrawFees(owner.address, 2, 0, { value: ton("1"), bounce: true });
+    val res = coll.sendWithdrawFees(owner.address, 2, 0, { value: grams("1"), bounce: true });
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(res.findTransaction({ from: coll.address, to: owner.address })).toBeNotNull();
 }
@@ -61,7 +61,7 @@ get fun `test admin: proxy edit parent record (resolver forbidden, non-admin rej
         1,
         CAT_SITE,
         recordVal,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(ok).toHaveSuccessfulTx({ to: coll.address });
     expect(
@@ -74,7 +74,7 @@ get fun `test admin: proxy edit parent record (resolver forbidden, non-admin rej
         2,
         CAT_DNS_NEXT_RESOLVER,
         recordVal,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(forbidden).toHaveFailedTx({ to: coll.address, exitCode: ERROR_CANNOT_EDIT_RESOLVER });
 
@@ -84,7 +84,7 @@ get fun `test admin: proxy edit parent record (resolver forbidden, non-admin rej
         3,
         CAT_SITE,
         recordVal,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(bad).toHaveFailedTx({ to: coll.address, exitCode: ERROR_NOT_ADMIN });
 }
@@ -97,7 +97,7 @@ get fun `test rescue: a mis-routed (non-parent) NFT can be rescued by the admin`
         1,
         strayNft.address,
         owner.address,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(
@@ -114,7 +114,7 @@ get fun `test item: edit_content and change/delete dns record`() {
     // EditContent: replace the whole records map
     var recs: DnsRecords = [];
     recs.set(CAT_SITE, beginCell().storeUint(0xad01, 16).endCell());
-    val edit = item.sendEditContent(user.address, 1, recs, { value: ton("1"), bounce: true });
+    val edit = item.sendEditContent(user.address, 1, recs, { value: grams("1"), bounce: true });
     expect(edit).toHaveSuccessfulTx({ to: item.address });
     expect(item.dnsresolve(makeDotSlice(), CAT_SITE).resolvedRecord).toBeNotNull();
 
@@ -125,7 +125,7 @@ get fun `test item: edit_content and change/delete dns record`() {
         2,
         CAT_SITE,
         emptyVal,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(del).toHaveSuccessfulTx({ to: item.address });
     expect(item.dnsresolve(makeDotSlice(), CAT_SITE).resolvedRecord).toEqual(null);
@@ -157,8 +157,8 @@ get fun `test transfer: rejects a masterchain new owner (wrong workchain)`() {
     val res = item.sendTransferOwnership(
         user.address,
         1,
-        makeTransferData(mcOwner, user.address, ton("0.05")),
-        { value: ton("1"), bounce: true },
+        makeTransferData(mcOwner, user.address, grams("0.05")),
+        { value: grams("1"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: item.address, exitCode: ERROR_WRONG_WORKCHAIN });
 }
@@ -176,7 +176,7 @@ get fun `test lock: landing pin is a ChangeDnsRecord the real .ton DnsItem accep
             oldOwnerAddress: owner.address,
             payload: emptyPayload(),
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(
         landed.findTransaction<ChangeDnsRecord>({ from: coll.address, to: parent.address }),
@@ -189,7 +189,7 @@ get fun `test topup: Excesses is accepted silently by collection and item (no ab
     val toColl = coll.sendAny(
         parent.address,
         Excesses { queryId: 7 }.toCell(),
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(toColl).toHaveSuccessfulTx({ to: coll.address });
 
@@ -198,7 +198,7 @@ get fun `test topup: Excesses is accepted silently by collection and item (no ab
     val toItem = item.sendAny(
         user.address,
         Excesses { queryId: 8 }.toCell(),
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(toItem).toHaveSuccessfulTx({ to: item.address });
 }

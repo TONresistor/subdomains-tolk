@@ -24,7 +24,7 @@ get fun `test linked: Locked and Linked addresses are distinct (no hijack overla
     val attacker = newActor("lattacker");
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(deployer.address, { value: ton("1"), bounce: false });
+    factory.deploy(deployer.address, { value: grams("1"), bounce: false });
 
     // The same parent maps to two different deterministic addresses by mode. This is the boundary
     // that stops Linked from pre-occupying a born-Locked handoff. Linked is also creator-bound, so
@@ -43,7 +43,7 @@ get fun `test linked: factory deploys a Linked collection with no .ton handoff`(
     val parent = newActor("lp2"); // the owner's .ton, which they KEEP
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val expected = factory.getLinkedCollectionAddress(parent.address, owner.address);
     val res = factory.sendCreateLinkedCollection(
@@ -52,7 +52,7 @@ get fun `test linked: factory deploys a Linked collection with no .ton handoff`(
         parent.address,
         owner.address,
         makeMeta(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
 
@@ -81,7 +81,7 @@ get fun `test linked: a third party cannot deploy the owner's creator-bound addr
     val attacker = newActor("bound-attacker");
     val parent = newActor("bound-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val ownerAddress = factory.getLinkedCollectionAddress(parent.address, owner.address);
     val res = factory.sendCreateLinkedCollection(
@@ -90,7 +90,7 @@ get fun `test linked: a third party cannot deploy the owner's creator-bound addr
         parent.address,
         owner.address, // attempted impersonation / immutable-config pre-occupation
         makeMeta(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_NOT_ADMIN });
     expect(testing.isDeployed(ownerAddress)).toEqual(false);
@@ -100,7 +100,7 @@ get fun `test linked: duplicate create returns deploy value to the creator`() {
     val owner = newActor("duplicate-owner");
     val parent = newActor("duplicate-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     factory.sendCreateLinkedCollection(
         owner.address,
@@ -108,7 +108,7 @@ get fun `test linked: duplicate create returns deploy value to the creator`() {
         parent.address,
         owner.address,
         makeMeta(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     val linked = factory.getLinkedCollectionAddress(parent.address, owner.address);
 
@@ -118,7 +118,7 @@ get fun `test linked: duplicate create returns deploy value to the creator`() {
         parent.address,
         owner.address,
         makeMeta(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(duplicate).toHaveSuccessfulTx({ to: linked });
     expect(
@@ -135,7 +135,7 @@ get fun `test linked: immutable creator witness survives a parent-proven claim`(
         owner.address,
         76,
         user.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(direct).toHaveFailedTx({
         to: coll.address,
@@ -164,7 +164,7 @@ get fun `test linked: factory rejects an underfunded Linked create`() {
     val parent = newActor("lp3");
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
         owner.address,
@@ -172,7 +172,7 @@ get fun `test linked: factory rejects an underfunded Linked create`() {
         parent.address,
         owner.address,
         makeMeta(),
-        { value: ton("0.1"), bounce: true }, // < COLLECTION_DEPLOY_VALUE + margin
+        { value: grams("0.1"), bounce: true }, // < COLLECTION_DEPLOY_VALUE + margin
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
 }
@@ -181,7 +181,7 @@ get fun `test linked: factory rejects one nanotON below the exact funding bounda
     val owner = newActor("boundary-owner");
     val parent = newActor("boundary-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
         owner.address,
@@ -198,7 +198,7 @@ get fun `test linked: factory accepts the exact deploy plus gas boundary`() {
     val owner = newActor("exact-owner");
     val parent = newActor("exact-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
         owner.address,
@@ -241,7 +241,7 @@ get fun `test linked: factory rejects a masterchain admin before sender binding`
     val parent = newActor("mc-admin-parent");
     val mcAdmin = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("linked-mc-admin"));
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
         owner.address,
@@ -249,7 +249,7 @@ get fun `test linked: factory rejects a masterchain admin before sender binding`
         parent.address,
         mcAdmin,
         makeMeta(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_WRONG_WORKCHAIN });
 }
@@ -258,7 +258,7 @@ get fun `test linked: factory rejects a masterchain parent`() {
     val owner = newActor("mc-parent-owner");
     val mcParent = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("linked-mc-parent"));
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val res = factory.sendCreateLinkedCollection(
         owner.address,
@@ -266,7 +266,7 @@ get fun `test linked: factory rejects a masterchain parent`() {
         mcParent,
         owner.address,
         makeMeta(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_WRONG_WORKCHAIN });
 }
@@ -275,20 +275,20 @@ get fun `test linked: factory rejects an invalid price grid`() {
     val owner = newActor("bad-grid-owner");
     val parent = newActor("bad-grid-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
     val badGrid: PriceConfig = {
         minChars: 4,
-        p1: ton("100"),
-        p2: ton("50"),
-        p3: ton("20"),
-        p4: ton("10"),
-        p5: ton("5"),
-        p6: ton("4"),
-        p7: ton("3"),
-        p8: ton("2"),
-        p9: ton("1"),
-        p10: ton("0.5"),
-        pRest: ton("0.6"), // non-monotonic: pRest exceeds p10
+        p1: grams("100"),
+        p2: grams("50"),
+        p3: grams("20"),
+        p4: grams("10"),
+        p5: grams("5"),
+        p6: grams("4"),
+        p7: grams("3"),
+        p8: grams("2"),
+        p9: grams("1"),
+        p10: grams("0.5"),
+        pRest: grams("0.6"), // non-monotonic: pRest exceeds p10
     };
     var badMeta = makeMeta();
     badMeta.priceConfig = badGrid.toCell();
@@ -299,7 +299,7 @@ get fun `test linked: factory rejects an invalid price grid`() {
         parent.address,
         owner.address,
         badMeta,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: factory.address, exitCode: ERROR_UNKNOWN_OP });
 }
@@ -315,7 +315,7 @@ get fun `test linked: skeleton rejects an admin different from its creator bindi
         isLinked: true,
         linkedAdmin: owner.address,
     });
-    coll.deploy(master.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(master.address, { value: grams("0.05"), bounce: false });
     expect(coll.getLinkedAdmin()).toEqual(owner.address);
 
     val res = coll.sendAny(
@@ -327,7 +327,7 @@ get fun `test linked: skeleton rejects an admin different from its creator bindi
             isLinked: true,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_NOT_ADMIN });
     expect(coll.getAdmin()).toEqual(null);
@@ -354,13 +354,13 @@ get fun `test linked: minting works and never heartbeats the parent`() {
 
 get fun `test linked: fill-up parent is rejected (no custody)`() {
     val (coll, _parent, owner, _user) = deployLinkedCollection();
-    val res = coll.sendFillUpParent(owner.address, 1, { value: ton("1"), bounce: true });
+    val res = coll.sendFillUpParent(owner.address, 1, { value: grams("1"), bounce: true });
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LINKED_NO_CUSTODY });
 }
 
 get fun `test linked: enforce-resolver is rejected (no custody)`() {
     val (coll, _parent, owner, _user) = deployLinkedCollection();
-    val res = coll.sendEnforceResolver(owner.address, 1, { value: ton("0.2"), bounce: true });
+    val res = coll.sendEnforceResolver(owner.address, 1, { value: grams("0.2"), bounce: true });
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LINKED_NO_CUSTODY });
 }
 
@@ -371,7 +371,7 @@ get fun `test linked: proxy-edit parent record is rejected (no custody)`() {
         1,
         CAT_WALLET,
         emptyPayload(),
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LINKED_NO_CUSTODY });
 }
@@ -390,7 +390,7 @@ get fun `test linked: an accidental parent transfer is safely returned without c
             oldOwnerAddress: owner.address,
             payload: emptyPayload(),
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(landed).toHaveSuccessfulTx({ to: coll.address });
 
@@ -414,7 +414,7 @@ get fun `test linked: an accidental parent transfer is safely returned without c
             oldOwnerAddress: inlineClaimant.address,
             payload: invalidInline,
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(rejectedInline).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getAdmin()).toEqual(owner.address);
@@ -437,7 +437,7 @@ get fun `test linked: explicit Locked conversion commits even when the pin canno
         linkedAdmin: owner.address,
     });
     // Keep the setup deliberately thin so the best-effort resolver pin cannot use old balance.
-    coll.deploy(master.address, { value: ton("0.001"), bounce: false });
+    coll.deploy(master.address, { value: grams("0.001"), bounce: false });
     coll.sendAny(
         master.address,
         LockCollection {
@@ -447,7 +447,7 @@ get fun `test linked: explicit Locked conversion commits even when the pin canno
             isLinked: true,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.003"), bounce: false },
+        { value: grams("0.003"), bounce: false },
     );
     expect(coll.getIsLinked()).toEqual(true);
 
@@ -459,7 +459,7 @@ get fun `test linked: explicit Locked conversion commits even when the pin canno
             oldOwnerAddress: owner.address,
             payload: linkedActionPayload(LINKED_ACTION_CONVERT_LOCKED),
         }.toCell(),
-        { value: ton("0.001"), bounce: false },
+        { value: grams("0.001"), bounce: false },
     );
     expect(landed).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getIsLinked()).toEqual(false);
@@ -476,7 +476,7 @@ get fun `test linked: cached admin cannot rescue the parent`() {
         1,
         parent.address,
         owner.address,
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(rescue).toHaveFailedTx({
         to: coll.address,
@@ -498,7 +498,7 @@ get fun `test linked: after upgrade to Locked the parent is rescue-protected aga
             oldOwnerAddress: owner.address,
             payload: linkedActionPayload(LINKED_ACTION_CONVERT_LOCKED),
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(coll.getIsLinked()).toEqual(false);
 
@@ -508,7 +508,7 @@ get fun `test linked: after upgrade to Locked the parent is rescue-protected aga
         2,
         parent.address,
         owner.address,
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(rescue).toHaveFailedTx({ to: coll.address, exitCode: ERROR_RESCUE_PARENT_FORBIDDEN });
 }
@@ -525,7 +525,7 @@ get fun `test linked: a stray non-parent NFT never force-locks a Linked collecti
             oldOwnerAddress: stranger.address,
             payload: emptyPayload(),
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: coll.address }); // absorbed, no throw
     expect(coll.getIsLinked()).toEqual(true);             // still self-custody

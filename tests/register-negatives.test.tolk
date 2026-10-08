@@ -14,7 +14,7 @@ get fun `test register: insufficient value is rejected`() {
         labelSlice("alice"),
         true,
         testOnchainMetadata(),
-        { value: ton("2"), bounce: true },
+        { value: grams("2"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
 }
@@ -27,7 +27,7 @@ get fun `test register: too-short label is rejected`() {
         labelSlice("bob"),
         true, // 3 chars < 4
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_SHORT });
 }
@@ -40,7 +40,7 @@ get fun `test register: invalid characters are rejected`() {
         labelSlice("hello!"),
         true, // '!' invalid
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
 }
@@ -54,13 +54,13 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         1,
         idx,
         true,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(reserveRes).toHaveSuccessfulTx({ to: coll.address });
 
     // note: "vip" is 3 chars (too short); use a 5-char reserved label instead
     val idx2 = labelIndex("admin");
-    coll.sendSetLabelReserved(owner.address, 2, idx2, true, { value: ton("1"), bounce: true });
+    coll.sendSetLabelReserved(owner.address, 2, idx2, true, { value: grams("1"), bounce: true });
 
     val userTry = coll.sendRegisterSubdomain(
         user.address,
@@ -68,7 +68,7 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         labelSlice("admin"),
         true,
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(userTry).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_RESERVED });
 
@@ -78,21 +78,33 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         labelSlice("admin"),
         true,
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(adminTry).toHaveSuccessfulTx({ to: coll.address });
 
     // The false branch must delete a reservation, not silently keep it.
     val released = labelIndex("release");
-    coll.sendSetLabelReserved(owner.address, 3, released, true, { value: ton("1"), bounce: true });
-    coll.sendSetLabelReserved(owner.address, 4, released, false, { value: ton("1"), bounce: true });
+    coll.sendSetLabelReserved(
+        owner.address,
+        3,
+        released,
+        true,
+        { value: grams("1"), bounce: true },
+    );
+    coll.sendSetLabelReserved(
+        owner.address,
+        4,
+        released,
+        false,
+        { value: grams("1"), bounce: true },
+    );
     val releasedMint = coll.sendRegisterSubdomain(
         user.address,
         5,
         labelSlice("release"),
         true,
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(releasedMint).toHaveSuccessfulTx({ to: coll.address });
 }
@@ -105,7 +117,7 @@ get fun `test admin: transfer admin role, old admin loses rights`() {
         owner.address,
         1,
         newAdmin.address,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getAdmin()).toEqual(newAdmin.address);
@@ -116,7 +128,7 @@ get fun `test admin: transfer admin role, old admin loses rights`() {
         2,
         labelIndex("zzzzz"),
         true,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(rogue).toHaveFailedTx({ to: coll.address, exitCode: ERROR_NOT_ADMIN });
 }
@@ -128,7 +140,7 @@ get fun `test rescue: admin cannot rescue the parent domain`() {
         1,
         parent.address,
         owner.address,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_RESCUE_PARENT_FORBIDDEN });
 }

@@ -4,26 +4,26 @@ import "errors"
 import "prices"
 
 // ---- fee/economy constants ----
-const MIN_TONS_FOR_STORAGE = ton("0.05")
-const ITEM_DEPLOY_COST = ton("0.06")
-const ITEM_READY_VALUE = ton("0.002")
-const MINT_FEE_BUFFER = ton("0.01")
-const COLLECTION_MIN_BALANCE = ton("0.05")
-const COLLECTION_DEPLOY_VALUE = ton("0.13")
-const FACTORY_READY_VALUE = ton("0.002")
-const FACTORY_GAS_MARGIN = ton("0.005")
-const RESOLVER_PIN_VALUE = ton("0.01")
-const RESOLVER_PIN_FUND = ton("0.02")
-const MIN_CREATE_VALUE = ton("0.2")
-const MIN_PARENT_FILL = ton("0.01") // min incoming value for a caller-funded parent renew
-const FWD_FEE_RESERVE = ton("0.02")
+const MIN_TONS_FOR_STORAGE = grams("0.05")
+const ITEM_DEPLOY_COST = grams("0.06")
+const ITEM_READY_VALUE = grams("0.002")
+const MINT_FEE_BUFFER = grams("0.01")
+const COLLECTION_MIN_BALANCE = grams("0.05")
+const COLLECTION_DEPLOY_VALUE = grams("0.13")
+const FACTORY_READY_VALUE = grams("0.002")
+const FACTORY_GAS_MARGIN = grams("0.005")
+const RESOLVER_PIN_VALUE = grams("0.01")
+const RESOLVER_PIN_FUND = grams("0.02")
+const MIN_CREATE_VALUE = grams("0.2")
+const MIN_PARENT_FILL = grams("0.01") // min incoming value for a caller-funded parent renew
+const FWD_FEE_RESERVE = grams("0.02")
 const PARENT_HEARTBEAT_INTERVAL = 86400 // 1 day
-const PARENT_HEARTBEAT_AMOUNT = ton("0.01")
-const MIN_PARENT_RETURN_VALUE = ton("0.01")
-const MIN_CONFIRM_MINT_VALUE = ton("0.005")
-const HANDOFF_RETRY_VALUE = ton("0.1")
-const HANDOFF_CONFIRM_VALUE = ton("0.02")
-const MIN_REJECTED_RETURN_VALUE = ton("0.05")
+const PARENT_HEARTBEAT_AMOUNT = grams("0.01")
+const MIN_PARENT_RETURN_VALUE = grams("0.01")
+const MIN_CONFIRM_MINT_VALUE = grams("0.005")
+const HANDOFF_RETRY_VALUE = grams("0.1")
+const HANDOFF_CONFIRM_VALUE = grams("0.02")
+const MIN_REJECTED_RETURN_VALUE = grams("0.05")
 // ---- access/pricing constants ----
 const ACCESS_PUBLIC: uint8 = 0
 const ACCESS_ALLOWLIST: uint8 = 1

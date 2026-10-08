@@ -116,7 +116,7 @@ get fun `test mutation: factory ignores a forged current-generation transfer bou
     val attacker = newActor("mutation-bounce-attacker");
     val parent = newActor("mutation-bounce-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val create = createMessage({
         bounce: false,
@@ -154,8 +154,8 @@ get fun `test mutation: factory ignores a forged current-generation transfer bou
     val bounced = createMessage({
         bounce: false,
         dest: factory.address,
-        value: ton("0.1"),
-        body: mutationRichBounce(forgedTransfer.toCell(), ton("0.1")),
+        value: grams("0.1"),
+        body: mutationRichBounce(forgedTransfer.toCell(), grams("0.1")),
     }).bounced();
     val result = net.send(parent.address, bounced);
 
@@ -168,14 +168,14 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
     val attacker = newActor("mutation-rejected-attacker");
     val parent = newActor("mutation-rejected-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val rejected = testing.processSingleTraceStep(
         parent.address,
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("1"),
+            value: grams("1"),
             body: OwnershipAssigned {
                 queryId: 150,
                 oldOwnerAddress: owner.address,
@@ -206,7 +206,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.1"),
+            value: grams("0.1"),
             body: mutationRichBounce(forgedCurrent.toCell(), returned.info.value.grams),
         }).bounced(),
     );
@@ -230,7 +230,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.1"),
+            value: grams("0.1"),
             body: mutationRichBounce(oldGeneration.toCell(), returned.info.value.grams),
         }).bounced(),
     );
@@ -240,7 +240,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
     val wrongAck = factory.sendAny(
         parent.address,
         Excesses { queryId: returnBody.queryId + 1 }.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(wrongAck).toHaveFailedTx({
         to: factory.address,
@@ -252,7 +252,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
         owner.address,
         151,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(duplicateRetry).toHaveFailedTx({
         to: factory.address,
@@ -264,7 +264,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.1"),
+            value: grams("0.1"),
             body: mutationRichBounce(returnBody.toCell(), returned.info.value.grams),
         }).bounced(),
     );
@@ -277,7 +277,7 @@ get fun `test mutation: rejected custody authenticates bounce, ack and retry`() 
         attacker.address,
         152,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(unauthorized).toHaveFailedTx({ to: factory.address, exitCode: ERROR_NOT_ADMIN });
 
@@ -309,7 +309,7 @@ get fun `test mutation: factory authenticates recovery phase, generation and cal
     val attacker = newActor("mutation-recovery-attacker");
     val parent = newActor("mutation-recovery-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val create = createMessage({
         bounce: false,
@@ -329,7 +329,7 @@ get fun `test mutation: factory authenticates recovery phase, generation and cal
     val prematureAck = factory.sendAny(
         parent.address,
         Excesses { queryId: lock.deploymentId }.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(prematureAck).toHaveFailedTx({
         to: factory.address,
@@ -349,7 +349,7 @@ get fun `test mutation: factory authenticates recovery phase, generation and cal
     val wrongGenerationAck = factory.sendAny(
         parent.address,
         Excesses { queryId: lock.deploymentId + 1 }.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(wrongGenerationAck).toHaveFailedTx({
         to: factory.address,
@@ -365,7 +365,7 @@ get fun `test mutation: factory authenticates recovery phase, generation and cal
     val wrongSender = factory.sendAny(
         attacker.address,
         complete.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(wrongSender).toHaveFailedTx({
         to: factory.address,
@@ -377,7 +377,7 @@ get fun `test mutation: factory authenticates recovery phase, generation and cal
     val badQuery = factory.sendAny(
         collectionAddress,
         wrongQuery.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(badQuery).toHaveFailedTx({
         to: factory.address,
@@ -389,7 +389,7 @@ get fun `test mutation: factory authenticates recovery phase, generation and cal
     val badAdmin = factory.sendAny(
         collectionAddress,
         wrongAdmin.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(badAdmin).toHaveFailedTx({
         to: factory.address,
@@ -432,7 +432,7 @@ get fun `test mutation: collection authenticates handoff proof and confirmation`
             oldOwnerAddress: master,
             payload,
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(mismatchedLanding).toHaveFailedTx({
         to: collection.address,
@@ -448,7 +448,7 @@ get fun `test mutation: collection authenticates handoff proof and confirmation`
     val wrongSender = collection.sendAny(
         attacker.address,
         confirmation.toCell(),
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(wrongSender).toHaveFailedTx({
         to: collection.address,
@@ -460,7 +460,7 @@ get fun `test mutation: collection authenticates handoff proof and confirmation`
     val badParent = collection.sendAny(
         master,
         wrongParent.toCell(),
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(badParent).toHaveFailedTx({
         to: collection.address,
@@ -471,17 +471,17 @@ get fun `test mutation: collection authenticates handoff proof and confirmation`
 get fun `test mutation: item transfer reserves every required forward fee`() {
     val owner = newActor("mutation-fees-owner");
     val nextOwner = newActor("mutation-fees-next");
-    val probe = deployInitializedItem(owner, "probe", ton("0.04"));
+    val probe = deployInitializedItem(owner, "probe", grams("0.04"));
     val probeTransfer = probe.sendTransferOwnership(
         owner.address,
         400,
         makeTransferData(nextOwner.address, null, 0),
-        { value: ton("0.02"), bounce: true },
+        { value: grams("0.02"), bounce: true },
     );
     val probeTx = probeTransfer.findTransaction<TransferOwnership>({ to: probe.address })!;
     val fee = forwardedFee(probeTx.loadInMsg<TransferOwnership>().info);
 
-    val silent = deployInitializedItem(owner, "silent", ton("0.04"));
+    val silent = deployInitializedItem(owner, "silent", grams("0.04"));
     expect(silent.getDomain().hash()).toEqual(labelSlice("silent").hash());
     val silentBalance = testing.getAccountBalance(silent.address);
     val boundaryValue = MIN_TONS_FOR_STORAGE - silentBalance + fee - 1;
@@ -494,9 +494,9 @@ get fun `test mutation: item transfer reserves every required forward fee`() {
     expect(boundaryTransfer).toHaveSuccessfulTx({ to: silent.address });
     expect(silent.getEditor()).toEqual(nextOwner.address);
 
-    val response = deployInitializedItem(owner, "response", ton("0.04"));
+    val response = deployInitializedItem(owner, "response", grams("0.04"));
     val responseBalance = testing.getAccountBalance(response.address);
-    val responseValue = ton("0.02");
+    val responseValue = grams("0.02");
     val responseTransfer = response.sendTransferOwnership(
         owner.address,
         402,
@@ -514,10 +514,10 @@ get fun `test mutation: item transfer reserves every required forward fee`() {
     expect(excessValue).toBeLessOrEqual(maximum);
     expect(excessValue).toBeGreater(maximum - responseFee);
 
-    val forwarded = deployInitializedItem(owner, "forwarded", ton("0.04"));
+    val forwarded = deployInitializedItem(owner, "forwarded", grams("0.04"));
     val forwardedBalance = testing.getAccountBalance(forwarded.address);
-    val forwardedValue = ton("0.1");
-    val forwardAmount = ton("0.01");
+    val forwardedValue = grams("0.1");
+    val forwardAmount = grams("0.01");
     val forwardedTransfer = forwarded.sendTransferOwnership(
         owner.address,
         403,
@@ -534,8 +534,8 @@ get fun `test mutation: item transfer reserves every required forward fee`() {
     })!;
     val forwardedExcessValue = messageValue(forwardedExcess.loadInMsg<Excesses>().info);
     val forwardedMaximum = forwardedBalance + forwardedValue - MIN_TONS_FOR_STORAGE -
-    forwardAmount -
-    forwardedInputFee * 2;
+        forwardAmount -
+        forwardedInputFee * 2;
     expect(forwardedExcessValue).toBeLessOrEqual(forwardedMaximum);
 }
 
@@ -543,14 +543,14 @@ get fun `test mutation: factory ignores malformed and unrelated bounces`() {
     val caller = newActor("mutation-malformed-caller");
     val nextOwner = newActor("mutation-malformed-owner");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(caller.address, { value: ton("1"), bounce: false });
+    factory.deploy(caller.address, { value: grams("1"), bounce: false });
 
     val truncated = net.send(
         caller.address,
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.01"),
+            value: grams("0.01"),
             body: beginCell().endCell(),
         }).bounced(),
     );
@@ -561,8 +561,8 @@ get fun `test mutation: factory ignores malformed and unrelated bounces`() {
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.01"),
-            body: mutationRichBounce(beginCell().endCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: mutationRichBounce(beginCell().endCell(), grams("0.01")),
         }).bounced(),
     );
     expect(emptyOriginal).toHaveSuccessfulTx({ to: factory.address });
@@ -572,10 +572,10 @@ get fun `test mutation: factory ignores malformed and unrelated bounces`() {
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.01"),
+            value: grams("0.01"),
             body: mutationRichBounce(
                 beginCell().storeUint(0xdeadbeef, 32).endCell(),
-                ton("0.01"),
+                grams("0.01"),
             ),
         }).bounced(),
     );
@@ -590,8 +590,8 @@ get fun `test mutation: factory ignores malformed and unrelated bounces`() {
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.01"),
-            body: mutationRichBounce(invalidTransfer.toCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: mutationRichBounce(invalidTransfer.toCell(), grams("0.01")),
         }).bounced(),
     );
     expect(invalidPayload).toHaveSuccessfulTx({ to: factory.address });
@@ -601,12 +601,12 @@ get fun `test mutation: linked deployment bounce clears persisted recovery`() {
     val owner = newActor("mutation-linked-bounce-owner");
     val parent = newActor("mutation-linked-bounce-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val request = createMessage({
         bounce: true,
         dest: factory.address,
-        value: ton("0.5"),
+        value: grams("0.5"),
         body: CreateLinkedCollection {
             queryId: 500,
             parentDomain: parent.address,
@@ -622,7 +622,7 @@ get fun `test mutation: linked deployment bounce clears persisted recovery`() {
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.24"),
+            value: grams("0.24"),
             body: mutationRichBounce(lock.toCell(), COLLECTION_DEPLOY_VALUE),
         }).bounced(),
     );
@@ -634,7 +634,7 @@ get fun `test mutation: linked deployment bounce clears persisted recovery`() {
         owner.address,
         501,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(retry).toHaveFailedTx({
         to: factory.address,
@@ -648,14 +648,14 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
     val parentB = newActor("mutation-linked-refund-parent-b");
     val parentC = newActor("mutation-linked-refund-parent-c");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val createStep = testing.processSingleTraceStep(
         owner.address,
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.5"),
+            value: grams("0.5"),
             body: CreateLinkedCollection {
                 queryId: 600,
                 parentDomain: parentA.address,
@@ -665,9 +665,9 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
         }),
     );
     expect(createStep.outMessages.size()).toEqual(2);
-    val createRefund = ton("0.5") - COLLECTION_DEPLOY_VALUE - FACTORY_GAS_MARGIN;
+    val createRefund = grams("0.5") - COLLECTION_DEPLOY_VALUE - FACTORY_GAS_MARGIN;
     expect(createStep.outMessages.at<Excesses>(1).info.value.grams).toBeGreater(
-        createRefund - ton("0.001"),
+        createRefund - grams("0.001"),
     );
     expect(createStep.outMessages.at<Excesses>(1).info.value.grams).toBeLessOrEqual(createRefund);
 
@@ -676,7 +676,7 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.5"),
+            value: grams("0.5"),
             body: CreateLinkedCollection {
                 queryId: 601,
                 parentDomain: parentB.address,
@@ -709,7 +709,7 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.5"),
+            value: grams("0.5"),
             body: CreateLinkedCollection {
                 queryId: 603,
                 parentDomain: parentC.address,
@@ -723,7 +723,7 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.5"),
+            value: grams("0.5"),
             body: RetryCollectionDeployment {
                 queryId: 604,
                 collectionAddress: factory.getLinkedCollectionAddress(
@@ -735,7 +735,7 @@ get fun `test mutation: factory refunds linked create and retry values exactly`(
     );
     expect(overpaidRetry.outMessages.size()).toEqual(2);
     expect(overpaidRetry.outMessages.at<Excesses>(1).info.value.grams).toBeGreater(
-        createRefund - ton("0.001"),
+        createRefund - grams("0.001"),
     );
     expect(overpaidRetry.outMessages.at<Excesses>(1).info.value.grams).toBeLessOrEqual(
         createRefund,
@@ -746,7 +746,7 @@ get fun `test mutation: stale returned custody cannot revive an old deployment`(
     val owner = newActor("mutation-stale-owner");
     val parent = newActor("mutation-stale-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val firstRequest = createMessage({
         bounce: false,
@@ -823,7 +823,7 @@ get fun `test mutation: stale returned custody cannot revive an old deployment`(
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("1"),
+            value: grams("1"),
             body: OwnershipAssigned {
                 queryId: 702,
                 oldOwnerAddress: owner.address,
@@ -838,7 +838,7 @@ get fun `test mutation: stale returned custody cannot revive an old deployment`(
     val acknowledgement = factory.sendAny(
         parent.address,
         Excesses { queryId: rejectedReturn.queryId }.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(acknowledgement).toHaveSuccessfulTx({ to: factory.address });
 
@@ -846,7 +846,7 @@ get fun `test mutation: stale returned custody cannot revive an old deployment`(
         owner.address,
         703,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(retry).toHaveFailedTx({
         to: factory.address,
@@ -858,7 +858,7 @@ get fun `test mutation: collection readiness cannot skip generation or phase`() 
     val owner = newActor("mutation-ready-owner");
     val parent = newActor("mutation-ready-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val request = createMessage({
         bounce: false,
@@ -890,7 +890,7 @@ get fun `test mutation: collection readiness cannot skip generation or phase`() 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.01"),
+            value: grams("0.01"),
             body: oldReady,
         }),
     );
@@ -911,7 +911,7 @@ get fun `test mutation: collection readiness cannot skip generation or phase`() 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.01"),
+            value: grams("0.01"),
             body: validReady.loadBody(),
         }),
     );
@@ -924,7 +924,7 @@ get fun `test mutation: handoff completion cannot skip generation or phase`() {
     val parentA = newActor("mutation-complete-parent-a");
     val parentB = newActor("mutation-complete-parent-b");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val requestA = createMessage({
         bounce: false,
@@ -953,7 +953,7 @@ get fun `test mutation: handoff completion cannot skip generation or phase`() {
         lockA.queryId,
         parentA.address,
         owner.address,
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(wrongGeneration).toHaveSuccessfulTx({ to: factory.address });
     val retryA = factory.sendRetryCollectionDeployment(
@@ -986,7 +986,7 @@ get fun `test mutation: handoff completion cannot skip generation or phase`() {
         lockB.queryId,
         parentB.address,
         owner.address,
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(prematureComplete).toHaveSuccessfulTx({ to: factory.address });
     val retryB = testing.processSingleTraceStep(
@@ -1012,7 +1012,7 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.01"),
+            value: grams("0.01"),
             body: beginCell().endCell(),
         }).bounced(),
     );
@@ -1023,8 +1023,8 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.01"),
-            body: mutationRichBounce(beginCell().endCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: mutationRichBounce(beginCell().endCell(), grams("0.01")),
         }).bounced(),
     );
     expect(emptyOriginal).toHaveSuccessfulTx({ to: collection.address });
@@ -1034,10 +1034,10 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.01"),
+            value: grams("0.01"),
             body: mutationRichBounce(
                 beginCell().storeUint(0xdeadbeef, 32).endCell(),
-                ton("0.01"),
+                grams("0.01"),
             ),
         }).bounced(),
     );
@@ -1057,7 +1057,7 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.06"),
+            value: grams("0.06"),
             body: mutationRichBounce(init.toCell(), ITEM_DEPLOY_COST),
         }).bounced(),
     );
@@ -1066,7 +1066,7 @@ get fun `test mutation: collection safely ignores malformed bounces and empty to
     val activeTopup = collection.sendAny(
         user.address,
         beginCell().endCell(),
-        { value: ton("0.05"), bounce: false },
+        { value: grams("0.05"), bounce: false },
     );
     expect(activeTopup).toHaveSuccessfulTx({ to: collection.address });
 }
@@ -1081,12 +1081,12 @@ get fun `test mutation: skeleton guards and getters remain total`() {
         isLinked: false,
         linkedAdmin: master.address,
     });
-    skeleton.deploy(master.address, { value: ton("0.1"), bounce: false });
+    skeleton.deploy(master.address, { value: grams("0.1"), bounce: false });
 
     val topup = skeleton.sendAny(
         user.address,
         beginCell().endCell(),
-        { value: ton("0.05"), bounce: false },
+        { value: grams("0.05"), bounce: false },
     );
     expect(topup).toHaveSuccessfulTx({ to: skeleton.address });
     val (_royaltyNumerator, _royaltyDenominator, royaltyDestination) = skeleton.royaltyParams();
@@ -1110,7 +1110,7 @@ get fun `test mutation: skeleton guards and getters remain total`() {
         createMessage({
             bounce: false,
             dest: skeleton.address,
-            value: ton("0.06"),
+            value: grams("0.06"),
             body: mutationRichBounce(init.toCell(), ITEM_DEPLOY_COST),
         }).bounced(),
     );
@@ -1137,7 +1137,7 @@ get fun `test mutation: collection saturates mint rollback and validates handoff
         origin,
         minted,
         0,
-        ton("2"),
+        grams("2"),
     );
     val init: SubdomainInit = {
         queryId: 1002,
@@ -1152,7 +1152,7 @@ get fun `test mutation: collection saturates mint rollback and validates handoff
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.06"),
+            value: grams("0.06"),
             body: mutationRichBounce(init.toCell(), ITEM_DEPLOY_COST),
         }).bounced(),
     );
@@ -1167,23 +1167,23 @@ get fun `test mutation: collection saturates mint rollback and validates handoff
             oldOwnerAddress: owner.address,
             payload: inlinePayload,
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(landing).toHaveSuccessfulTx({ to: collection.address });
 }
 
 get fun `test mutation: collection withdrawal preserves the requested amount and floor`() {
     val (collection, _parent, owner, user) = deployLockedCollection();
-    mintSubdomain(collection, user, "withdraw", ton("5"));
+    mintSubdomain(collection, user, "withdraw", grams("5"));
     val partial = collection.sendWithdrawFees(
         owner.address,
         1100,
-        ton("0.01"),
-        { value: ton("0.05"), bounce: true },
+        grams("0.01"),
+        { value: grams("0.05"), bounce: true },
     );
     val payout = partial.findTransaction({ from: collection.address, to: owner.address })!;
     expect(messageValue(payout.loadInMsg<RemainingBitsAndRefs>().info)).toBeLessOrEqual(
-        ton("0.01"),
+        grams("0.01"),
     );
 
     val master = newActor("mutation-floor-master");
@@ -1208,7 +1208,7 @@ get fun `test mutation: collection withdrawal preserves the requested amount and
         floorOwner.address,
         1101,
         0,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(noPayout).toHaveSuccessfulTx({ to: floor.address });
     expect(noPayout.findTransaction({ from: floor.address, to: floorOwner.address })).toEqual(null);
@@ -1231,7 +1231,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         emptyOrigin,
         minted,
         0,
-        ton("1"),
+        grams("1"),
     );
     val noReceipt = empty.sendConfirmParentHandoff(
         master.address,
@@ -1239,7 +1239,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         1201,
         parent.address,
         owner.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(noReceipt).toHaveSuccessfulTx({ to: empty.address });
     expect(noReceipt.findTransaction({ from: empty.address })).toEqual(null);
@@ -1262,7 +1262,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         returningOrigin,
         minted,
         0,
-        ton("1"),
+        grams("1"),
     );
     val replay = returning.sendConfirmParentHandoff(
         master.address,
@@ -1270,7 +1270,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         receipt.requestQueryId,
         parent.address,
         owner.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(
         replay.findTransaction<TransferOwnership>({
@@ -1288,7 +1288,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         receipt.requestQueryId,
         parent.address,
         owner.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(
         duplicate.findTransaction<TransferOwnership>({
@@ -1322,8 +1322,8 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         createMessage({
             bounce: false,
             dest: returning.address,
-            value: ton("0.05"),
-            body: mutationRichBounce(failedReturn.toCell(), ton("0.05")),
+            value: grams("0.05"),
+            body: mutationRichBounce(failedReturn.toCell(), grams("0.05")),
         }).bounced(),
     );
     val afterBounce = returning.sendConfirmParentHandoff(
@@ -1332,7 +1332,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         receipt.requestQueryId,
         parent.address,
         owner.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(
         afterBounce.findTransaction<TransferOwnership>({
@@ -1359,7 +1359,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         completedOrigin,
         minted,
         0,
-        ton("1"),
+        grams("1"),
     );
     val mismatch = completed.sendConfirmParentHandoff(
         master.address,
@@ -1367,7 +1367,7 @@ get fun `test mutation: collection recovery receipt controls replay behavior`() 
         completedReceipt.requestQueryId + 1,
         parent.address,
         owner.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(mismatch).toHaveSuccessfulTx({ to: completed.address });
     expect(mismatch.findTransaction({ from: completed.address })).toEqual(null);

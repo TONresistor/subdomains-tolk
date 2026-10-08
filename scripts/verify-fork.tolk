@@ -8,8 +8,8 @@ import "@acton/emulation/network"
 import "@acton/emulation/testing"
 import "@contracts/dns-utils"
 import "@contracts/messages"
-import "@contracts/prices"
 import "@contracts/storage"
+import "@tests/default-prices"
 import "@wrappers/SubdomainCollection.gen"
 import "@wrappers/SubdomainFactory.gen"
 
@@ -62,7 +62,7 @@ fun transferParent(
 ) {
     val transfer = createMessage({
         bounce: true,
-        value: ton("0.2"),
+        value: grams("0.2"),
         dest: parent,
         body: TransferOwnership {
             queryId,
@@ -81,7 +81,7 @@ fun transferParent(
 fun returnParent(parent: address, currentOwner: address, owner: address, queryId: uint64) {
     val transfer = createMessage({
         bounce: true,
-        value: ton("0.1"),
+        value: grams("0.1"),
         dest: parent,
         body: TransferOwnership {
             queryId,
@@ -143,14 +143,14 @@ fun main() {
     );
 
     val master = testing.treasury("fork-master");
-    testing.topUp(master.address, ton("10"));
+    testing.topUp(master.address, grams("10"));
     val collection = SubdomainCollection.fromStorage({
         master: master.address,
         parentDomain: parent,
         isLinked: true,
         linkedAdmin: owner,
     });
-    collection.deploy(master.address, { value: ton("1"), bounce: false });
+    collection.deploy(master.address, { value: grams("1"), bounce: false });
     collection.sendAny(
         master.address,
         LockCollection {
@@ -161,7 +161,7 @@ fun main() {
             isLinked: true,
             meta: forkCollectionMeta().toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
     assert (collection.getIsLinked()) throw 1001;
 
@@ -185,11 +185,11 @@ fun main() {
     assert (parentData(parent).ownerAddress! == owner) throw 1010;
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(master.address, { value: ton("0.1"), bounce: false });
+    factory.deploy(master.address, { value: grams("0.1"), bounce: false });
     val lockedCollectionAddress = factory.getCollectionAddress(parent);
     val createLocked = createMessage({
         bounce: true,
-        value: ton("0.3"),
+        value: grams("0.3"),
         dest: parent,
         body: TransferOwnership {
             queryId: 5,

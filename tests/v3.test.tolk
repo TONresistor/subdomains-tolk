@@ -56,7 +56,7 @@ fun v3MessageValue(info: TlbCommonMessageInfo): coins {
 fun deployCollectionWithPolicyAndMeta(
     policy: CollectionPolicyState,
     meta: CollectionMeta,
-    value: coins = ton("1"),
+    value: coins = grams("1"),
 ): (SubdomainCollection, Treasury, Treasury, Treasury) {
     val master = newActor("v3-policy-master");
     val parent = newActor("v3-policy-parent");
@@ -129,13 +129,13 @@ get fun `test v3: allowlist controls access without changing prices`() {
         owner.address,
         1,
         ACCESS_ALLOWLIST,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     collection.sendSetAccessMode(
         owner.address,
         10,
         ACCESS_ALLOWLIST,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     val denied = collection.sendRegisterSubdomain(
         outsider.address,
@@ -143,7 +143,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         labelSlice("denied"),
         true,
         testOnchainMetadata(),
-        { value: ton("10"), bounce: true },
+        { value: grams("10"), bounce: true },
     );
     expect(denied).toHaveFailedTx({ to: collection.address, exitCode: ERROR_MINT_NOT_ALLOWED });
 
@@ -152,7 +152,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         3,
         user.address,
         true,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(collection.getIsAllowlisted(user.address)).toEqual(true);
     collection.sendSetAllowlistEntry(
@@ -160,9 +160,9 @@ get fun `test v3: allowlist controls access without changing prices`() {
         30,
         user.address,
         true,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
-    expect(collection.getMintQuote(user.address, 5).effectivePrice).toEqual(ton("5"));
+    expect(collection.getMintQuote(user.address, 5).effectivePrice).toEqual(grams("5"));
 
     val first = collection.sendRegisterSubdomain(
         user.address,
@@ -170,10 +170,10 @@ get fun `test v3: allowlist controls access without changing prices`() {
         labelSlice("alice"),
         true,
         testOnchainMetadata(),
-        { value: ton("5.1"), bounce: true },
+        { value: grams("5.1"), bounce: true },
     );
     expect(first).toHaveSuccessfulTx({ from: collection.address, deploy: true });
-    expect(collection.getWithdrawableRevenue()).toEqual(ton("5"));
+    expect(collection.getWithdrawableRevenue()).toEqual(grams("5"));
 
     val second = collection.sendRegisterSubdomain(
         user.address,
@@ -181,7 +181,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         labelSlice("bobby"),
         true,
         testOnchainMetadata(),
-        { value: ton("5.1"), bounce: true },
+        { value: grams("5.1"), bounce: true },
     );
     expect(second).toHaveSuccessfulTx({ from: collection.address, deploy: true });
 
@@ -190,7 +190,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         6,
         user.address,
         false,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(collection.getMintQuote(user.address, 5).allowed).toEqual(false);
     collection.sendSetAllowlistEntry(
@@ -198,7 +198,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         7,
         user.address,
         false,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
 }
 
@@ -208,7 +208,7 @@ get fun `test v3: admin-only policy blocks users but not the admin`() {
         owner.address,
         1,
         ACCESS_ADMIN_ONLY,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(collection.getMintQuote(user.address, 5).allowed).toEqual(false);
     expect(collection.getMintQuote(owner.address, 5).allowed).toEqual(true);
@@ -219,7 +219,7 @@ get fun `test v3: admin-only policy blocks users but not the admin`() {
         labelSlice("owner"),
         true,
         testOnchainMetadata(),
-        { value: ton("5.1"), bounce: true },
+        { value: grams("5.1"), bounce: true },
     );
     expect(adminMint).toHaveSuccessfulTx({ from: collection.address, deploy: true });
 }
@@ -230,7 +230,7 @@ get fun `test v3: lost ItemReady is finalized through authenticated static data`
     val request = createMessage({
         bounce: true,
         dest: collection.address,
-        value: ton("6"),
+        value: grams("6"),
         body: RegisterSubdomain {
             queryId: 88,
             label: labelSlice("alice").toCell(),
@@ -253,7 +253,7 @@ get fun `test v3: lost ItemReady is finalized through authenticated static data`
     expect(confirmation).toHaveSuccessfulTx({ to: collection.address });
     expect(collection.getIsMintPending(index)).toEqual(false);
     expect(collection.getMintedCount()).toEqual(1);
-    expect(collection.getWithdrawableRevenue()).toEqual(ton("5"));
+    expect(collection.getWithdrawableRevenue()).toEqual(grams("5"));
 }
 
 get fun `test v3: parent proof claims Linked admin and authenticated Excesses finalizes return`() {
@@ -267,7 +267,7 @@ get fun `test v3: parent proof claims Linked admin and authenticated Excesses fi
             oldOwnerAddress: buyer.address,
             payload: linkedActionPayload(LINKED_ACTION_CLAIM),
         }.toCell(),
-        { value: MIN_PARENT_RETURN_VALUE + ton("0.04"), bounce: false },
+        { value: MIN_PARENT_RETURN_VALUE + grams("0.04"), bounce: false },
     );
     expect(claim).toHaveSuccessfulTx({ to: collection.address });
     expect(collection.getAdmin()).toEqual(buyer.address);
@@ -282,7 +282,7 @@ get fun `test v3: parent proof claims Linked admin and authenticated Excesses fi
     val acknowledgement = collection.sendAny(
         parent.address,
         Excesses { queryId: pending.returnQueryId }.toCell(),
-        { value: ton("0.08"), bounce: false },
+        { value: grams("0.08"), bounce: false },
     );
     expect(acknowledgement).toHaveSuccessfulTx({ to: collection.address });
     expect(collection.getParentReturn().pending).toEqual(false);
@@ -351,7 +351,7 @@ get fun `test v3: underfunded parent return stays permissionlessly retryable`() 
             oldOwnerAddress: owner.address,
             payload: linkedActionPayload(LINKED_ACTION_CLAIM),
         }.toCell(),
-        { value: ton("0.001"), bounce: false },
+        { value: grams("0.001"), bounce: false },
     );
     val pending = collection.getParentReturn();
     expect(pending.pending).toEqual(true);
@@ -392,14 +392,14 @@ get fun `test v3: underfunded parent return stays permissionlessly retryable`() 
 
 get fun `test v3: Linked claim requires parent proof and withdraws revenue`() {
     val (collection, parent, seller, user) = deployLinkedCollection();
-    mintSubdomain(collection, user, "alice", ton("6"));
-    expect(collection.getWithdrawableRevenue()).toEqual(ton("5"));
+    mintSubdomain(collection, user, "alice", grams("6"));
+    expect(collection.getWithdrawableRevenue()).toEqual(grams("5"));
 
     val direct = collection.sendWithdrawFees(
         seller.address,
         900,
-        ton("1"),
-        { value: ton("0.05"), bounce: true },
+        grams("1"),
+        { value: grams("0.05"), bounce: true },
     );
     expect(direct).toHaveFailedTx({
         to: collection.address,
@@ -431,7 +431,7 @@ get fun `test v3: item readiness authenticates sender and pending receipt`() {
         1,
         index,
         user.address,
-        { value: ton("0.01"), bounce: true },
+        { value: grams("0.01"), bounce: true },
     );
     expect(forged).toHaveFailedTx({ to: collection.address, exitCode: ERROR_NOT_FROM_COLLECTION });
     expect(collection.getMintedCount()).toEqual(0);
@@ -439,7 +439,7 @@ get fun `test v3: item readiness authenticates sender and pending receipt`() {
     val request = createMessage({
         bounce: true,
         dest: collection.address,
-        value: ton("6"),
+        value: grams("6"),
         body: RegisterSubdomain {
             queryId: 10,
             label: labelSlice("alice").toCell(),
@@ -488,7 +488,7 @@ get fun `test v3: policy administration validates mode and owner`() {
         owner.address,
         1,
         3,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(invalidMode).toHaveFailedTx({
         to: collection.address,
@@ -500,7 +500,7 @@ get fun `test v3: policy administration validates mode and owner`() {
         2,
         user.address,
         true,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(unauthorized).toHaveFailedTx({ to: collection.address, exitCode: ERROR_NOT_ADMIN });
 }
@@ -510,7 +510,7 @@ get fun `test v3: pending label cannot be bypassed`() {
     val pendingRequest = createMessage({
         bounce: true,
         dest: collection.address,
-        value: ton("6"),
+        value: grams("6"),
         body: RegisterSubdomain {
             queryId: 3,
             label: labelSlice("alice").toCell(),
@@ -525,7 +525,7 @@ get fun `test v3: pending label cannot be bypassed`() {
         labelSlice("alice"),
         true,
         testOnchainMetadata(),
-        { value: ton("6"), bounce: true },
+        { value: grams("6"), bounce: true },
     );
     expect(duplicate).toHaveFailedTx({ to: collection.address, exitCode: ERROR_LABEL_TAKEN });
 }
@@ -537,7 +537,7 @@ get fun `test v3: static-data recovery authenticates sender and collection`() {
     val request = createMessage({
         bounce: true,
         dest: collection.address,
-        value: ton("6"),
+        value: grams("6"),
         body: RegisterSubdomain {
             queryId: 10,
             label: labelSlice("alice").toCell(),
@@ -552,7 +552,7 @@ get fun `test v3: static-data recovery authenticates sender and collection`() {
         11,
         index,
         collection.address,
-        { value: ton("0.01"), bounce: true },
+        { value: grams("0.01"), bounce: true },
     );
     expect(forgedSender).toHaveFailedTx({
         to: collection.address,
@@ -565,7 +565,7 @@ get fun `test v3: static-data recovery authenticates sender and collection`() {
         12,
         index,
         attacker.address,
-        { value: ton("0.01"), bounce: true },
+        { value: grams("0.01"), bounce: true },
     );
     expect(wrongCollection).toHaveFailedTx({
         to: collection.address,
@@ -579,7 +579,7 @@ get fun `test v3: static-data recovery authenticates sender and collection`() {
         13,
         noPendingIndex,
         collection.address,
-        { value: ton("0.01"), bounce: true },
+        { value: grams("0.01"), bounce: true },
     );
     expect(noPending).toHaveSuccessfulTx({ to: collection.address });
 }
@@ -598,7 +598,7 @@ get fun `test v3: ConfirmMint requires pending state and caller funding`() {
     val request = createMessage({
         bounce: true,
         dest: collection.address,
-        value: ton("6"),
+        value: grams("6"),
         body: RegisterSubdomain {
             queryId: 2,
             label: labelSlice("alice").toCell(),
@@ -648,7 +648,7 @@ get fun `test v3: parent recovery rejects invalid state and protects pending cus
         4,
         parent.address,
         owner.address,
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(rescue).toHaveFailedTx({
         to: linked.address,
@@ -659,13 +659,13 @@ get fun `test v3: parent recovery rejects invalid state and protects pending cus
     val acknowledged = linked.sendAny(
         parent.address,
         Excesses { queryId: returnQueryId }.toCell(),
-        { value: ton("0.05"), bounce: false },
+        { value: grams("0.05"), bounce: false },
     );
     expect(acknowledged).toHaveSuccessfulTx({ to: linked.address });
 }
 
 get fun `test v3: withdrawal is capped by physical balance`() {
-    val accountedRevenue = ton("5");
+    val accountedRevenue = grams("5");
     val policy: CollectionPolicyState = {
         accessMode: ACCESS_PUBLIC,
         withdrawableRevenue: accountedRevenue,
@@ -677,7 +677,7 @@ get fun `test v3: withdrawal is capped by physical balance`() {
     val (collection, _parent, owner, _user) = deployCollectionWithPolicyAndMeta(
         policy,
         makeMeta(),
-        ton("0.2"),
+        grams("0.2"),
     );
     val balanceBefore = testing.getAccountBalance(collection.address);
 
@@ -685,7 +685,7 @@ get fun `test v3: withdrawal is capped by physical balance`() {
         owner.address,
         20,
         0,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     expect(withdrawal).toHaveSuccessfulTx({ to: collection.address });
     val payout = withdrawal.findTransaction({ from: collection.address, to: owner.address })!;
@@ -701,19 +701,19 @@ get fun `test v3: item bounce keeps allowlist membership and clears pending mint
         owner.address,
         1,
         ACCESS_ALLOWLIST,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     collection.sendSetAllowlistEntry(
         owner.address,
         2,
         user.address,
         true,
-        { value: ton("0.05"), bounce: true },
+        { value: grams("0.05"), bounce: true },
     );
     val request = createMessage({
         bounce: true,
         dest: collection.address,
-        value: ton("6"),
+        value: grams("6"),
         body: RegisterSubdomain {
             queryId: 3,
             label: labelSlice("alice").toCell(),
@@ -730,7 +730,7 @@ get fun `test v3: item bounce keeps allowlist membership and clears pending mint
     val mismatchedBounce = createMessage({
         bounce: false,
         dest: collection.address,
-        value: ton("0.065"),
+        value: grams("0.065"),
         body: v3RichBounceBody(mismatchedInit.toCell(), ITEM_DEPLOY_COST),
     }).bounced();
     testing.processSingleTraceStep(itemAddress, mismatchedBounce);
@@ -739,7 +739,7 @@ get fun `test v3: item bounce keeps allowlist membership and clears pending mint
     val bounced = createMessage({
         bounce: false,
         dest: collection.address,
-        value: ton("0.065"),
+        value: grams("0.065"),
         body: v3RichBounceBody(deploy.loadBody().toCell(), ITEM_DEPLOY_COST),
     }).bounced();
     testing.processSingleTraceStep(itemAddress, bounced);
@@ -757,7 +757,7 @@ get fun `test v3: new getters are total on skeleton and missing entries`() {
         isLinked: true,
         linkedAdmin: user.address,
     });
-    skeleton.deploy(master.address, { value: ton("0.05"), bounce: false });
+    skeleton.deploy(master.address, { value: grams("0.05"), bounce: false });
     expect(skeleton.getIsAllowlisted(user.address)).toEqual(false);
     expect(skeleton.getMintQuote(user.address, 5).allowed).toEqual(false);
     expect(skeleton.getParentReturn().pending).toEqual(false);

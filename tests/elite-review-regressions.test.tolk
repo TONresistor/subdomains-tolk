@@ -40,7 +40,7 @@ fun internalMessageValue(info: TlbCommonMessageInfo): coins {
 }
 
 fun expectCarryAllRefund(actual: coins, inbound: coins) {
-    expect(actual).toBeGreater(inbound - ton("0.002"));
+    expect(actual).toBeGreater(inbound - grams("0.002"));
     expect(actual).toBeLessOrEqual(inbound);
 }
 
@@ -48,7 +48,7 @@ get fun `test elite review: pre-compute dust cannot enter factory recovery state
     val owner = newActor("precompute-dust-owner");
     val parent = newActor("precompute-dust-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.01"), bounce: false });
+    factory.deploy(owner.address, { value: grams("0.01"), bounce: false });
 
     // At one nanotON the TVM skips compute before contract code runs. This pins the protocol boundary:
     // no handler-side validation or recovery write is possible below the execution fee threshold.
@@ -69,7 +69,7 @@ get fun `test elite review: pre-compute dust cannot enter factory recovery state
             queryId: 8,
             collectionAddress: factory.getCollectionAddress(parent.address),
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(retry).toHaveFailedTx({
         to: factory.address,
@@ -81,14 +81,14 @@ get fun `test elite review: dust Locked rejection persists an admin-funded custo
     val owner = newActor("dust-rejection-owner");
     val parent = newActor("dust-rejection-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.01"), bounce: false });
+    factory.deploy(owner.address, { value: grams("0.01"), bounce: false });
 
     // Canonical TON DNS allows a very small notification forward amount. This funds the factory's
     // compute but not a reliable outbound return, so the custody notification must still commit.
     val rejected = createMessage({
         bounce: false,
         dest: factory.address,
-        value: ton("0.001"),
+        value: grams("0.001"),
         body: OwnershipAssigned {
             queryId: 9,
             oldOwnerAddress: owner.address,
@@ -110,7 +110,7 @@ get fun `test elite review: dust Locked rejection persists an admin-funded custo
             queryId: 10,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(retry).toHaveSuccessfulTx({ to: factory.address });
     val returned = retry.findTransaction<TransferOwnership>({
@@ -130,7 +130,7 @@ get fun `test elite review: dust Locked rejection persists an admin-funded custo
     val ack = factory.sendAny(
         parent.address,
         Excesses { queryId: returnBody.queryId }.toCell(),
-        { value: ton("0.01"), bounce: false },
+        { value: grams("0.01"), bounce: false },
     );
     expect(ack).toHaveSuccessfulTx({ to: factory.address });
     val cleared = factory.sendAny(
@@ -139,7 +139,7 @@ get fun `test elite review: dust Locked rejection persists an admin-funded custo
             queryId: 11,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(cleared).toHaveFailedTx({
         to: factory.address,
@@ -165,7 +165,7 @@ get fun `test elite review: hash-addressed collection reports TEP-62 next index 
         isLinked: false,
         linkedAdmin: skeletonMaster.address,
     });
-    skeleton.deploy(skeletonMaster.address, { value: ton("0.05"), bounce: false });
+    skeleton.deploy(skeletonMaster.address, { value: grams("0.05"), bounce: false });
     expect(skeleton.getCollectionData().nextItemIndex).toEqual(-1);
     expect(skeleton.getCollectionData().ownerAddress).toEqual(null);
 }
@@ -176,7 +176,7 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
     val register = createMessage({
         bounce: true,
         dest: coll.address,
-        value: ton("20"),
+        value: grams("20"),
         body: RegisterSubdomain {
             queryId: 71,
             label: labelSlice("alice").toCell(),
@@ -197,7 +197,7 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
     val unauthenticated = createMessage({
         bounce: false,
         dest: coll.address,
-        value: ton("0.065"),
+        value: grams("0.065"),
         body: bouncedBody,
     }).bounced();
     val badSender = net.send(attacker.address, unauthenticated);
@@ -210,7 +210,7 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
         createMessage({
             bounce: false,
             dest: coll.address,
-            value: ton("0.065"),
+            value: grams("0.065"),
             body: richBounceBody(wrongLabel.toCell(), ITEM_DEPLOY_COST),
         }).bounced(),
     );
@@ -219,7 +219,7 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
     val bounced = createMessage({
         bounce: false,
         dest: coll.address,
-        value: ton("0.065"),
+        value: grams("0.065"),
         body: richBounceBody(originalInit.toCell(), ITEM_DEPLOY_COST),
     }).bounced();
     val rollback = testing.processSingleTraceStep(itemAddress, bounced);
@@ -229,7 +229,7 @@ get fun `test elite review: failed item deploy rolls the label back and refunds`
     expect(rollback.outMessages.size()).toEqual(1);
     val refund = rollback.outMessages.at<Excesses>(0);
     expect(refund.loadBody().queryId).toEqual(71);
-    expect(refund.info.value.grams).toEqual(ton("5.065"));
+    expect(refund.info.value.grams).toEqual(grams("5.065"));
 
     // The rollback really frees the hash slot; a normal retry deploys the item.
     val (retried, _retryRes) = mintSubdomain(coll, user, "alice");
@@ -241,7 +241,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     val parent = newActor("bounce-parent");
     val attacker = newActor("bounce-attacker");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val request = createMessage({
         bounce: false,
@@ -261,7 +261,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     val unauthenticated = createMessage({
         bounce: false,
         dest: factory.address,
-        value: ton("0.24"),
+        value: grams("0.24"),
         body: richBounceBody(originalLock.toCell(), COLLECTION_DEPLOY_VALUE),
     }).bounced();
     val badSender = net.send(attacker.address, unauthenticated);
@@ -277,7 +277,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.24"),
+            value: grams("0.24"),
             body: richBounceBody(wrongAdmin.toCell(), COLLECTION_DEPLOY_VALUE),
         }).bounced(),
     );
@@ -290,7 +290,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.24"),
+            value: grams("0.24"),
             body: richBounceBody(wrongQuery.toCell(), COLLECTION_DEPLOY_VALUE),
         }).bounced(),
     );
@@ -305,7 +305,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
         createMessage({
             bounce: false,
             dest: factory.address,
-            value: ton("0.24"),
+            value: grams("0.24"),
             body: richBounceBody(wrongMeta.toCell(), COLLECTION_DEPLOY_VALUE),
         }).bounced(),
     );
@@ -314,7 +314,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     val bounced = createMessage({
         bounce: false,
         dest: factory.address,
-        value: ton("0.24"),
+        value: grams("0.24"),
         body: richBounceBody(originalLock.toCell(), COLLECTION_DEPLOY_VALUE),
     }).bounced();
     val recovery = testing.processSingleTraceStep(expectedCollection, bounced);
@@ -322,7 +322,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     expect(recovery.outMessages.size()).toEqual(1);
     val handoffMessage = recovery.outMessages.at<TransferOwnership>(0);
     expect(handoffMessage.info.value.grams).toEqual(
-        ton("0.24") + MIN_CREATE_VALUE - COLLECTION_DEPLOY_VALUE - FACTORY_GAS_MARGIN,
+        grams("0.24") + MIN_CREATE_VALUE - COLLECTION_DEPLOY_VALUE - FACTORY_GAS_MARGIN,
     );
     val handoff = handoffMessage.loadBody();
     expect(handoff.transferData.newOwnerAddress).toEqual(owner.address);
@@ -332,12 +332,12 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     expect(replay.outMessages.size()).toEqual(1);
     val replayRefund = replay.outMessages.at<Excesses>(0);
     expect(replayRefund.loadBody().queryId).toEqual(81);
-    expectCarryAllRefund(replayRefund.info.value.grams, ton("0.24"));
+    expectCarryAllRefund(replayRefund.info.value.grams, grams("0.24"));
     val factoryBalanceBeforeReturnAck = testing.getAccountBalance(factory.address);
     val returnAck = factory.sendAny(
         parent.address,
         Excesses { queryId: handoff.queryId }.toCell(),
-        { value: ton("0.21"), bounce: false },
+        { value: grams("0.21"), bounce: false },
     );
     expect(returnAck).toHaveSuccessfulTx({ to: factory.address });
     expect(testing.getAccountBalance(factory.address)).toBeLessOrEqual(
@@ -350,21 +350,21 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
     expect(deployBounceRefund.loadBody<Excesses>().queryId).toEqual(81);
     expectCarryAllRefund(
         internalMessageValue(deployBounceRefund.loadInMsg<Excesses>().info),
-        ton("0.21"),
+        grams("0.21"),
     );
     // Crossed failed attempts: a delayed deploy bounce can arrive after another failure's parent
     // return acknowledgement cleared pending, while no collection was ever deployed.
     val postAckLateStep = testing.processSingleTraceStep(expectedCollection, bounced);
     val postAckLateRefund = postAckLateStep.outMessages.at<Excesses>(0);
     expect(postAckLateRefund.loadBody().queryId).toEqual(81);
-    expectCarryAllRefund(postAckLateRefund.info.value.grams, ton("0.24"));
+    expectCarryAllRefund(postAckLateRefund.info.value.grams, grams("0.24"));
 
     // A stale transfer bounce cannot mutate or pay from an already completed generation.
     val delayedReturnBounce = createMessage({
         bounce: false,
         dest: factory.address,
-        value: ton("0.47"),
-        body: richBounceBody(handoff.toCell(), ton("0.48")),
+        value: grams("0.47"),
+        body: richBounceBody(handoff.toCell(), grams("0.48")),
     }).bounced();
     val delayedReturnStep = testing.processSingleTraceStep(parent.address, delayedReturnBounce);
     expect(delayedReturnStep.outMessages.size()).toEqual(0);
@@ -374,7 +374,7 @@ get fun `test elite review: failed Locked collection deploy returns custody and 
             queryId: 83,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(noLongerPending).toHaveFailedTx({
         to: factory.address,
@@ -387,7 +387,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     val parent = newActor("retry-locked-parent");
     val attacker = newActor("retry-locked-attacker");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val request = createMessage({
         bounce: false,
@@ -420,7 +420,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     val badReadySender = factory.sendAny(
         attacker.address,
         correctReady.toCell(),
-        { value: ton("0.02"), bounce: true },
+        { value: grams("0.02"), bounce: true },
     );
     expect(badReadySender).toHaveFailedTx({
         to: factory.address,
@@ -432,7 +432,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     val badReadyAdmin = factory.sendAny(
         expectedCollection,
         wrongReadyAdmin.toCell(),
-        { value: ton("0.02"), bounce: true },
+        { value: grams("0.02"), bounce: true },
     );
     expect(badReadyAdmin).toHaveFailedTx({
         to: factory.address,
@@ -444,7 +444,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     val badReadyQuery = factory.sendAny(
         expectedCollection,
         wrongReadyQuery.toCell(),
-        { value: ton("0.02"), bounce: true },
+        { value: grams("0.02"), bounce: true },
     );
     expect(badReadyQuery).toHaveFailedTx({
         to: factory.address,
@@ -470,7 +470,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
             queryId: 92,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(attackerRetry).toHaveFailedTx({ to: factory.address, exitCode: ERROR_NOT_ADMIN });
 
@@ -482,7 +482,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
             queryId: 92,
             collectionAddress: wrongWorkchain,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(wrongAddressRetry).toHaveFailedTx({
         to: factory.address,
@@ -495,7 +495,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
             queryId: 92,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(retry).toHaveSuccessfulTx({ to: factory.address });
     expect(
@@ -507,13 +507,13 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     val delayedDeployBounce = createMessage({
         bounce: false,
         dest: factory.address,
-        value: ton("0.24"),
+        value: grams("0.24"),
         body: richBounceBody(originalLock.toCell(), COLLECTION_DEPLOY_VALUE),
     }).bounced();
     val delayedRefundStep = testing.processSingleTraceStep(expectedCollection, delayedDeployBounce);
     val delayedRefund = delayedRefundStep.outMessages.at<Excesses>(0);
     expect(delayedRefund.loadBody().queryId).toEqual(91);
-    expectCarryAllRefund(delayedRefund.info.value.grams, ton("0.24"));
+    expectCarryAllRefund(delayedRefund.info.value.grams, grams("0.24"));
 
     // The factory retains pending until the collection proves the parent actually landed.
     val handoffTx = retry.findTransaction<TransferOwnership>({
@@ -546,7 +546,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
         owner.address,
         92,
         newAdmin.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(transferredAdmin).toHaveSuccessfulTx({ to: expectedCollection });
 
@@ -558,7 +558,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
             queryId: 93,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(finalRetry).toHaveSuccessfulTx({ to: factory.address });
     expect(
@@ -580,7 +580,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
             queryId: 94,
             collectionAddress: expectedCollection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(noLongerPending).toHaveFailedTx({
         to: factory.address,
@@ -594,7 +594,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     );
     val completedRefund = completedRefundStep.outMessages.at<Excesses>(0);
     expect(completedRefund.loadBody().queryId).toEqual(91);
-    expectCarryAllRefund(completedRefund.info.value.grams, ton("0.24"));
+    expectCarryAllRefund(completedRefund.info.value.grams, grams("0.24"));
 
     val lateComplete = factory.sendAny(
         expectedCollection,
@@ -604,7 +604,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
             parentDomain: parent.address,
             intendedAdmin: owner.address,
         }.toCell(),
-        { value: ton("0.02"), bounce: false },
+        { value: grams("0.02"), bounce: false },
     );
     val lateCompleteRefund = lateComplete.findTransaction<Excesses>({
         from: factory.address,
@@ -613,13 +613,13 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     expect(lateCompleteRefund.loadBody<Excesses>().queryId).toEqual(91);
     expectCarryAllRefund(
         internalMessageValue(lateCompleteRefund.loadInMsg<Excesses>().info),
-        ton("0.02"),
+        grams("0.02"),
     );
 
     val lateReady = factory.sendAny(
         expectedCollection,
         correctReady.toCell(),
-        { value: ton("0.02"), bounce: false },
+        { value: grams("0.02"), bounce: false },
     );
     val lateReadyRefund = lateReady.findTransaction<Excesses>({
         from: factory.address,
@@ -628,7 +628,7 @@ get fun `test elite review: admin can recover a Locked deployment whose ready ca
     expect(lateReadyRefund.loadBody<Excesses>().queryId).toEqual(91);
     expectCarryAllRefund(
         internalMessageValue(lateReadyRefund.loadInMsg<Excesses>().info),
-        ton("0.02"),
+        grams("0.02"),
     );
 }
 
@@ -636,12 +636,12 @@ get fun `test elite review: Linked create retries an in-flight request without o
     val owner = newActor("pending-owner");
     val parent = newActor("pending-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val first = createMessage({
         bounce: true,
         dest: factory.address,
-        value: ton("0.5"),
+        value: grams("0.5"),
         body: CreateLinkedCollection {
             queryId: 1,
             parentDomain: parent.address,
@@ -659,7 +659,7 @@ get fun `test elite review: Linked create retries an in-flight request without o
         parent.address,
         owner.address,
         changedMeta,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(changedConfig).toHaveFailedTx({ to: factory.address, exitCode: ERROR_UNKNOWN_OP });
 
@@ -669,7 +669,7 @@ get fun `test elite review: Linked create retries an in-flight request without o
         parent.address,
         owner.address,
         makeMeta(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(second).toHaveSuccessfulTx({ to: factory.address });
     expect(
@@ -682,7 +682,7 @@ get fun `test elite review: reauctioned Locked parent bypasses the old-admin col
     val newOwner = newActor("reauction-new-owner");
     val parent = newActor("reauction-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(oldOwner.address, { value: ton("1"), bounce: false });
+    factory.deploy(oldOwner.address, { value: grams("1"), bounce: false });
 
     val first = factory.sendOwnershipAssigned(
         parent.address,
@@ -741,7 +741,7 @@ get fun `test elite review: reauctioned Locked parent bypasses the old-admin col
     val acknowledged = factory.sendAny(
         parent.address,
         Excesses { queryId: returned.queryId }.toCell(),
-        { value: ton("0.31"), bounce: false },
+        { value: grams("0.31"), bounce: false },
     );
     expect(acknowledged).toHaveSuccessfulTx({ to: factory.address });
     expect(testing.getAccountBalance(factory.address)).toBeLessOrEqual(
@@ -754,7 +754,7 @@ get fun `test elite review: reauctioned Locked parent bypasses the old-admin col
     expect(reauctionRefund.loadBody<Excesses>().queryId).toEqual(502);
     expectCarryAllRefund(
         internalMessageValue(reauctionRefund.loadInMsg<Excesses>().info),
-        ton("0.31"),
+        grams("0.31"),
     );
     val cleared = factory.sendAny(
         newOwner.address,
@@ -762,7 +762,7 @@ get fun `test elite review: reauctioned Locked parent bypasses the old-admin col
             queryId: 503,
             collectionAddress: collection,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(cleared).toHaveFailedTx({
         to: factory.address,
@@ -775,7 +775,7 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
     val nextAdmin = newActor("handoff-race-next-admin");
     val parent = newActor("handoff-race-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(initialAdmin.address, { value: ton("1"), bounce: false });
+    factory.deploy(initialAdmin.address, { value: grams("1"), bounce: false });
 
     val created = factory.sendOwnershipAssigned(
         parent.address,
@@ -801,7 +801,7 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
         initialAdmin.address,
         602,
         nextAdmin.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(adminChanged).toHaveSuccessfulTx({ to: collectionAddress });
 
@@ -826,7 +826,7 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
     val acknowledged = factory.sendAny(
         parent.address,
         Excesses { queryId: returned.queryId }.toCell(),
-        { value: ton("0.41"), bounce: false },
+        { value: grams("0.41"), bounce: false },
     );
     expect(acknowledged).toHaveSuccessfulTx({ to: factory.address });
     expect(testing.getAccountBalance(factory.address)).toBeLessOrEqual(factoryBalanceBeforeRaceAck);
@@ -837,7 +837,7 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
     expect(raceRefund.loadBody<Excesses>().queryId).toEqual(601);
     expectCarryAllRefund(
         internalMessageValue(raceRefund.loadInMsg<Excesses>().info),
-        ton("0.41"),
+        grams("0.41"),
     );
     val cleared = factory.sendAny(
         initialAdmin.address,
@@ -845,7 +845,7 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
             queryId: 603,
             collectionAddress,
         }.toCell(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(cleared).toHaveFailedTx({
         to: factory.address,
@@ -856,21 +856,21 @@ get fun `test elite review: admin transfer during Locked handoff returns parent 
 get fun `test elite review: factory rejects null owner and unknown op`() {
     val caller = newActor("factory-negative");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(caller.address, { value: ton("1"), bounce: false });
+    factory.deploy(caller.address, { value: grams("1"), bounce: false });
 
     val nullOwner = factory.sendOwnershipAssigned(
         caller.address,
         1,
         null,
         emptyPayload(),
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(nullOwner).toHaveFailedTx({ to: factory.address, exitCode: ERROR_NULL_OLD_OWNER });
 
     val unknown = factory.sendAny(
         caller.address,
         beginCell().storeUint(0xdeadbeef, 32).endCell(),
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(unknown).toHaveFailedTx({ to: factory.address, exitCode: ERROR_UNKNOWN_OP });
 }
@@ -890,7 +890,7 @@ get fun `test elite review: collection rejects 127-byte labels and unknown ops`(
         tooLong,
         true,
         testOnchainMetadata(),
-        { value: ton("100"), bounce: true },
+        { value: grams("100"), bounce: true },
     );
     expect(longResult).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_LONG });
 
@@ -905,14 +905,14 @@ get fun `test elite review: collection rejects 127-byte labels and unknown ops`(
         maxLabel,
         true,
         testOnchainMetadata(),
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(maxResult).toHaveSuccessfulTx({ to: coll.address });
 
     val unknown = coll.sendAny(
         user.address,
         beginCell().storeUint(0xdeadbeef, 32).endCell(),
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(unknown).toHaveFailedTx({ to: coll.address, exitCode: ERROR_UNKNOWN_OP });
 }
@@ -928,7 +928,7 @@ get fun `test elite review: collection validates skeleton and duplicate deployme
         isLinked: false,
         linkedAdmin: master.address,
     });
-    skeleton.deploy(master.address, { value: ton("0.05"), bounce: false });
+    skeleton.deploy(master.address, { value: grams("0.05"), bounce: false });
 
     val wrongParent = skeleton.sendAny(
         master.address,
@@ -939,7 +939,7 @@ get fun `test elite review: collection validates skeleton and duplicate deployme
             isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.25"), bounce: true },
+        { value: grams("0.25"), bounce: true },
     );
     expect(wrongParent).toHaveFailedTx({ to: skeleton.address, exitCode: ERROR_NOT_FROM_MASTER });
 
@@ -952,7 +952,7 @@ get fun `test elite review: collection validates skeleton and duplicate deployme
             isLinked: true,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.25"), bounce: true },
+        { value: grams("0.25"), bounce: true },
     );
     expect(wrongMode).toHaveFailedTx({ to: skeleton.address, exitCode: ERROR_NOT_FROM_MASTER });
 
@@ -967,7 +967,7 @@ get fun `test elite review: collection validates skeleton and duplicate deployme
             isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.25"), bounce: true },
+        { value: grams("0.25"), bounce: true },
     );
     expect(badDuplicateParent).toHaveFailedTx({
         to: active.address,
@@ -983,7 +983,7 @@ get fun `test elite review: collection validates skeleton and duplicate deployme
             isLinked: true,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.25"), bounce: true },
+        { value: grams("0.25"), bounce: true },
     );
     expect(badDuplicateMode).toHaveFailedTx({
         to: active.address,
@@ -1017,7 +1017,7 @@ get fun `test elite review: item init authenticates sender, index and label`() {
                 workchain: BASECHAIN,
                 stateInit,
             },
-            value: ton("0.1"),
+            value: grams("0.1"),
             body: correctInit,
         }),
     );
@@ -1041,7 +1041,7 @@ get fun `test elite review: item init authenticates sender, index and label`() {
                 workchain: BASECHAIN,
                 stateInit,
             },
-            value: ton("0.1"),
+            value: grams("0.1"),
             body: wrongIndex,
         }),
     );
@@ -1058,7 +1058,7 @@ get fun `test elite review: item init authenticates sender, index and label`() {
                 workchain: BASECHAIN,
                 stateInit,
             },
-            value: ton("0.1"),
+            value: grams("0.1"),
             body: wrongLabel,
         }),
     );
@@ -1071,14 +1071,19 @@ get fun `test elite review: item rejects unauthorized edit, insolvent transfer a
     val (item, _mint) = mintSubdomain(coll, user, "alice");
 
     val records: DnsRecords = [];
-    val edit = item.sendEditContent(owner.address, 1, records, { value: ton("0.1"), bounce: true });
+    val edit = item.sendEditContent(
+        owner.address,
+        1,
+        records,
+        { value: grams("0.1"), bounce: true },
+    );
     expect(edit).toHaveFailedTx({ to: item.address, exitCode: ERROR_NOT_OWNER });
 
     val insolvent = item.sendTransferOwnership(
         user.address,
         2,
-        makeTransferData(owner.address, user.address, ton("1")),
-        { value: ton("0.001"), bounce: true },
+        makeTransferData(owner.address, user.address, grams("1")),
+        { value: grams("0.001"), bounce: true },
     );
     expect(insolvent).toHaveFailedTx({ to: item.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
     expect(item.getEditor()).toEqual(user.address);
@@ -1086,7 +1091,7 @@ get fun `test elite review: item rejects unauthorized edit, insolvent transfer a
     val unknown = item.sendAny(
         user.address,
         beginCell().storeUint(0xdeadbeef, 32).endCell(),
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(unknown).toHaveFailedTx({ to: item.address, exitCode: ERROR_UNKNOWN_OP });
 }
@@ -1100,8 +1105,8 @@ get fun `test elite review: item transfer optional branches emit only requested 
     val forwardOnly = forwardedItem.sendTransferOwnership(
         user.address,
         1,
-        makeTransferData(receiverA.address, null, ton("0.01")),
-        { value: ton("0.2"), bounce: true },
+        makeTransferData(receiverA.address, null, grams("0.01")),
+        { value: grams("0.2"), bounce: true },
     );
     expect(
         forwardOnly.findTransaction<OwnershipAssigned>({
@@ -1118,7 +1123,7 @@ get fun `test elite review: item transfer optional branches emit only requested 
         user.address,
         2,
         makeTransferData(receiverB.address, user.address, 0),
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(
         responseOnly.findTransaction<OwnershipAssigned>({ from: responseItem.address }),
@@ -1135,7 +1140,7 @@ get fun `test elite review: item transfer optional branches emit only requested 
         user.address,
         3,
         makeTransferData(owner.address, null, 0),
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(silent).toHaveSuccessfulTx({ to: silentItem.address });
     expect(silent.findTransaction({ from: silentItem.address })).toEqual(null);
@@ -1151,7 +1156,7 @@ get fun `test elite review: setWalletToMinter false leaves the wallet record abs
         labelSlice(label),
         false,
         testOnchainMetadata(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(mint).toHaveSuccessfulTx({ to: coll.address });
     val item = SubdomainItem.fromAddress(coll.getNftAddressByIndex(labelIndex(label)));

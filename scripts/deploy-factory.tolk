@@ -35,7 +35,7 @@ fun main() {
     val storageHash = initialStorage.toCell().hash();
     val declaredNetwork = env<string>("DEPLOY_NETWORK") ?? "emulation";
     val vmGlobalId = currentGlobalId();
-    val deployValue = ton("0.1");
+    val deployValue = grams("0.1");
 
     println("DEPLOY_BROADCAST={}", net.isBroadcasting());
     println("DEPLOY_NETWORK={}", declaredNetwork);

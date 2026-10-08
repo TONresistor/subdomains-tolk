@@ -8,12 +8,12 @@ import "@acton/testing/expect"
 import "@contracts/dns-utils"
 import "@contracts/errors"
 import "@contracts/messages"
-import "@contracts/prices"
 import "@contracts/storage"
+import "@tests/default-prices"
 import "@wrappers/SubdomainCollection.gen"
 import "@wrappers/SubdomainFactory.gen"
 
-const APP_PARENT_ACTION_VALUE = ton("0.05")
+const APP_PARENT_ACTION_VALUE = grams("0.05")
 
 struct DnsReply {
     prefixBits: int
@@ -104,7 +104,7 @@ fun main() {
     val parent = address("0:8f76b98377b90a50bdfc1cd7d16751dc7f5f998ec05e1f0ae24552760d833b7d");
     val telegramCollection = address("0:80d78a35f955a14b679faa887ff4cd5bfc0f43b4a4eea2a7e6927f3701b273c2");
     val originalOwner = parentData(parent).ownerAddress!;
-    testing.topUp(originalOwner, ton("20"));
+    testing.topUp(originalOwner, grams("20"));
 
     val master = testing.treasury("telemint-v5-master");
     val linked = SubdomainCollection.fromStorage({
@@ -113,7 +113,7 @@ fun main() {
         isLinked: true,
         linkedAdmin: originalOwner,
     });
-    linked.deploy(master.address, { value: ton("1"), bounce: false });
+    linked.deploy(master.address, { value: grams("1"), bounce: false });
     linked.sendAny(
         master.address,
         LockCollection {
@@ -124,12 +124,12 @@ fun main() {
             isLinked: true,
             meta: collectionMeta().toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
 
     val resolverPin = createMessage({
         bounce: true,
-        value: ton("0.1"),
+        value: grams("0.1"),
         dest: parent,
         body: ChangeDnsRecord {
             queryId: 2,
@@ -192,11 +192,11 @@ fun main() {
     assert (parentData(parent).ownerAddress! == buyer.address) throw 2011;
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(master.address, { value: ton("0.1"), bounce: false });
+    factory.deploy(master.address, { value: grams("0.1"), bounce: false });
     val lockedAddress = factory.getCollectionAddress(parent);
     val createLocked = createMessage({
         bounce: true,
-        value: ton("0.3"),
+        value: grams("0.3"),
         dest: parent,
         body: TransferOwnership {
             queryId: 8,

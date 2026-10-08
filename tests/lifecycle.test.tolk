@@ -24,7 +24,7 @@ get fun `test lock: collection deploys locked; the parent .ton landing re-pins (
             oldOwnerAddress: owner.address,
             payload: emptyPayload(),
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(landed).toHaveSuccessfulTx({ to: coll.address });
     expect(
@@ -43,7 +43,7 @@ get fun `test lock: only the master (factory) can lock the collection`() {
         isLinked: false,
         linkedAdmin: masterT.address,
     });
-    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(masterT.address, { value: grams("0.05"), bounce: false });
 
     // a non-master cannot lock it
     val res = coll.sendAny(
@@ -55,7 +55,7 @@ get fun `test lock: only the master (factory) can lock the collection`() {
             isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_NOT_FROM_MASTER });
     expect(coll.getAdmin()).toEqual(null);
@@ -115,8 +115,8 @@ get fun `test transfer: subdomain NFT changes owner (TEP-62)`() {
     val transferRes = item.sendTransferOwnership(
         user.address,
         9,
-        makeTransferData(buyer.address, user.address, ton("0.05")),
-        { value: ton("1"), bounce: true },
+        makeTransferData(buyer.address, user.address, grams("0.05")),
+        { value: grams("1"), bounce: true },
     );
     expect(transferRes).toHaveSuccessfulTx({ to: item.address });
     expect(item.getEditor()).toEqual(buyer.address);
@@ -125,8 +125,8 @@ get fun `test transfer: subdomain NFT changes owner (TEP-62)`() {
     val rogue = item.sendTransferOwnership(
         user.address,
         10,
-        makeTransferData(user.address, user.address, ton("0.05")),
-        { value: ton("1"), bounce: true },
+        makeTransferData(user.address, user.address, grams("0.05")),
+        { value: grams("1"), bounce: true },
     );
     expect(rogue).toHaveFailedTx({ to: item.address, exitCode: ERROR_NOT_OWNER });
 }
@@ -147,7 +147,7 @@ get fun `test records: owner edits its own dns record`() {
         1,
         CAT_SITE,
         recordVal,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(badEdit).toHaveFailedTx({ to: item.address, exitCode: ERROR_NOT_OWNER });
 
@@ -156,7 +156,7 @@ get fun `test records: owner edits its own dns record`() {
         1,
         CAT_SITE,
         recordVal,
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(goodEdit).toHaveSuccessfulTx({ to: item.address });
 }

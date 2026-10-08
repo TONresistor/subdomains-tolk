@@ -53,7 +53,7 @@ get fun `test renew: anyone (e.g. a subdomain holder) can renew the parent`() {
     val holder = newActor("holder");
 
     testing.setNow(1700000000 + 86400 + 10);
-    val res = coll.sendFillUpParent(holder.address, 1, { value: ton("1"), bounce: true });
+    val res = coll.sendFillUpParent(holder.address, 1, { value: grams("1"), bounce: true });
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getLastParentFillUp()).toEqual(1700000000 + 86400 + 10);
 }

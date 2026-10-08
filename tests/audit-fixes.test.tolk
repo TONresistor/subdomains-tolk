@@ -28,7 +28,7 @@ get fun `test audit1: lock commits with a minimal forward value`() {
         isLinked: false,
         linkedAdmin: masterT.address,
     });
-    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(masterT.address, { value: grams("0.05"), bounce: false });
 
     // even on a minimal value, the lock COMMITS (the resolver pin is IGNORE_ERRORS)
     val res = coll.sendAny(
@@ -40,7 +40,7 @@ get fun `test audit1: lock commits with a minimal forward value`() {
             isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("0.06"), bounce: false },
+        { value: grams("0.06"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.isLocked()).toEqual(true);
@@ -59,7 +59,7 @@ get fun `test audit4: landing pin is a SET (ref present), pointing to self`() {
             oldOwnerAddress: owner.address,
             payload: emptyPayload(),
         }.toCell(),
-        { value: ton("0.1"), bounce: false },
+        { value: grams("0.1"), bounce: false },
     );
     val tx = res.findTransaction<ChangeDnsRecord>({ from: coll.address, to: parent.address });
     expect(tx).toBeNotNull();
@@ -104,7 +104,7 @@ get fun `test locked re-auction: an old collection returns the parent to its new
                 .endCell()
                 .beginParse(),
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(landed).toHaveSuccessfulTx({ to: coll.address });
     expect(
@@ -119,7 +119,7 @@ get fun `test locked re-auction: an old collection returns the parent to its new
 // audit #1: EnforceResolver can re-pin (public, idempotent), completing or repairing the lock
 get fun `test audit1: enforce_resolver re-pins the resolver (public)`() {
     val (coll, parent, _owner, user) = deployLockedCollection();
-    val res = coll.sendEnforceResolver(user.address, 1, { value: ton("0.2"), bounce: true });
+    val res = coll.sendEnforceResolver(user.address, 1, { value: grams("0.2"), bounce: true });
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     // typed match proves the opcode (0x4eb1f0f9) + structure of the re-pin message
     expect(
@@ -138,7 +138,7 @@ get fun `test audit2: double-mint of the same label is rejected`() {
         labelSlice("alice"),
         true,
         testOnchainMetadata(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(dup).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TAKEN });
 }
@@ -157,7 +157,7 @@ get fun `test audit3: a label with refs is rejected`() {
         labelWithRef,
         true,
         testOnchainMetadata(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
 }
@@ -181,7 +181,7 @@ get fun `test audit5: getters are safe on unlocked/uninitialized state`() {
         isLinked: false,
         linkedAdmin: masterT.address,
     });
-    coll.deploy(masterT.address, { value: ton("1"), bounce: false });
+    coll.deploy(masterT.address, { value: grams("1"), bounce: false });
     // not locked yet
     expect(coll.getPrice(5)).toEqual(0);
     expect(coll.isLocked()).toEqual(false);

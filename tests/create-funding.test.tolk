@@ -24,7 +24,7 @@ get fun `test funding: thin factory and legacy 0.4 inbound complete safely`() {
     val factory = SubdomainFactory.fromStorage({ pending: [] });
     factory.deploy(
         owner.address,
-        { value: ton("0.1"), bounce: false },
+        { value: grams("0.1"), bounce: false },
     ); // mainnet-like thin balance
 
     val res = factory.sendOwnershipAssigned(
@@ -32,7 +32,7 @@ get fun `test funding: thin factory and legacy 0.4 inbound complete safely`() {
         1,
         owner.address,
         createPayload(),
-        { value: ton("0.4"), bounce: false },
+        { value: grams("0.4"), bounce: false },
     );
     // whatever happens, the factory must emit a TransferOwnership (create hand-off or refund)
     expect(res).toHaveSuccessfulTx({ to: factory.address });
@@ -46,7 +46,7 @@ get fun `test funding: one nanotON below the Locked create minimum returns the p
     val owner = newActor("locked-boundary-owner");
     val parent = newActor("locked-boundary-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.01"), bounce: false });
+    factory.deploy(owner.address, { value: grams("0.01"), bounce: false });
 
     val res = factory.sendOwnershipAssigned(
         parent.address,
@@ -67,7 +67,7 @@ get fun `test funding: rejected custody returns immediately at its exact safety 
     val lowParent = newActor("rejected-boundary-low-parent");
     val exactParent = newActor("rejected-boundary-exact-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("0.1"), bounce: false });
     val junk = beginCell().storeRef(beginCell().storeUint(1, 1).endCell()).endCell().beginParse();
 
     val low = testing.processSingleTraceStep(
@@ -108,7 +108,7 @@ get fun `test funding: create succeeds at exact minimum with a dust factory bala
     val owner = newActor("ofo2");
     val parent = newActor("ofp2");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.01"), bounce: false }); // dust own balance
+    factory.deploy(owner.address, { value: grams("0.01"), bounce: false }); // dust own balance
 
     val expectedColl = factory.getCollectionAddress(parent.address);
     val res = factory.sendOwnershipAssigned(
@@ -127,7 +127,7 @@ get fun `test funding: create succeeds at exact minimum with a dust factory bala
     val coll = SubdomainCollection.fromAddress(expectedColl);
     expect(coll.isLocked()).toEqual(true);
     expect(coll.getAdmin()).toEqual(owner.address);
-    expect(coll.getPrice(5)).toEqual(ton("5")); // meta (price grid) parsed and live
+    expect(coll.getPrice(5)).toEqual(grams("5")); // meta (price grid) parsed and live
     expect(testing.getAccountBalance(coll.address)).toBeGreater(
         testing.getAccountStorageFee(coll.address, 10 * 365 * 24 * 60 * 60)!,
     );
@@ -144,7 +144,7 @@ get fun `test funding: garbage meta payload refunds the .ton instead of strandin
     val owner = newActor("ofo3");
     val parent = newActor("ofp3");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("0.1"), bounce: false });
 
     // a ref that is NOT a CollectionMeta (no 3 sub-refs)
     val junk = beginCell().storeRef(beginCell().storeUint(42, 32).endCell()).endCell().beginParse();
@@ -153,7 +153,7 @@ get fun `test funding: garbage meta payload refunds the .ton instead of strandin
         1,
         owner.address,
         junk,
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
     // refunded, nothing deployed
@@ -167,7 +167,7 @@ get fun `test funding: rejected custody does not retain caller metadata`() {
     val owner = newActor("bounded-return-owner");
     val parent = newActor("bounded-return-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("0.1"), bounce: false });
     val cellsBefore = testing.getAccountState(factory.address)!.storageStat.used.cells;
 
     var amplified = beginCell().storeUint(0, 1).endCell();
@@ -180,7 +180,7 @@ get fun `test funding: rejected custody does not retain caller metadata`() {
         10,
         owner.address,
         payload,
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
     expect(rejected).toHaveSuccessfulTx({ to: factory.address });
     expect(testing.getAccountState(factory.address)!.storageStat.used.cells).toBeLessOrEqual(
@@ -199,7 +199,7 @@ get fun `test funding: rejected custody does not retain caller metadata`() {
     val acknowledged = factory.sendAny(
         parent.address,
         Excesses { queryId: returnBody.queryId }.toCell(),
-        { value: ton("0.05"), bounce: false },
+        { value: grams("0.05"), bounce: false },
     );
     expect(acknowledged).toHaveSuccessfulTx({ to: factory.address });
     expect(testing.getAccountState(factory.address)!.storageStat.used.cells).toBeLessOrEqual(
@@ -211,7 +211,7 @@ get fun `test funding: a later valid parent transfer replaces a stale rejection 
     val owner = newActor("stale-return-owner");
     val parent = newActor("stale-return-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("0.1"), bounce: false });
 
     val junk = beginCell().storeRef(beginCell().storeUint(7, 3).endCell()).endCell().beginParse();
     factory.sendOwnershipAssigned(
@@ -219,7 +219,7 @@ get fun `test funding: a later valid parent transfer replaces a stale rejection 
         20,
         owner.address,
         junk,
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
 
     val recovered = factory.sendOwnershipAssigned(

@@ -20,19 +20,19 @@ fun main() {
         return;
     }
 
-    val coll = SubdomainCollection.fromAddress(collectionAddress!);
+    val coll = SubdomainCollection.fromAddress(collectionAddress);
 
-    val charCount = label!.beginParse().remainingBitsCount() / BYTE_SIZE;
+    val charCount = label.beginParse().remainingBitsCount() / BYTE_SIZE;
     val quote = coll.getMintQuote(minter.address, charCount);
     if (!quote.allowed) {
         println("Mint is not allowed for {}", minter.address);
         return;
     }
 
-    val itemAddr = coll.getNftAddressByIndex(label!.beginParse().hash());
+    val itemAddr = coll.getNftAddressByIndex(label.beginParse().hash());
     println(
         "Label {} ({} chars): price {}, send {}, item at {}",
-        label!,
+        label,
         charCount,
         quote.effectivePrice,
         quote.requiredValue,
@@ -42,9 +42,9 @@ fun main() {
     val res = coll.sendRegisterSubdomain(
         minter.address,
         1,
-        label!.beginParse(),
+        label.beginParse(),
         true,
-        content!,
+        content,
         { value: quote.requiredValue, bounce: true },
     );
     if (res.waitForFirstTransaction() == null) {
@@ -52,5 +52,5 @@ fun main() {
         return;
     }
 
-    println("Minted {}, NFT item at {}", label!, itemAddr);
+    println("Minted {}, NFT item at {}", label, itemAddr);
 }

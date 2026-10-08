@@ -17,7 +17,7 @@ fun main() {
         return;
     }
 
-    val coll = SubdomainCollection.fromAddress(collectionAddress!);
+    val coll = SubdomainCollection.fromAddress(collectionAddress);
     println("Last parent fill-up (unix): {}", coll.getLastParentFillUp());
 
     val res = coll.sendFillUpParent(

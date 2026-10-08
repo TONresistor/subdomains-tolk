@@ -5,7 +5,7 @@ version = "5.0.0"
 license = "MIT"
 
 [toolchain]
-acton = "1.1.0"
+acton = "1.2.1"
 
 # Tier 2: one NFT per subdomain
 [contracts.SubdomainItem]
@@ -32,6 +32,7 @@ function = "subdomainCollectionCompiledCode"
 
 [lint]
 max-warnings = 0
+exclude = ["source-func/**"]
 
 [lint.rules]
 dict-type-use = "allow"
@@ -39,7 +40,7 @@ throw-requires-errors-enum = "allow"
 
 [fmt]
 width = 100
-ignore = []
+ignore = ["source-func/**"]
 
 [import-mappings]
 acton = ".acton"

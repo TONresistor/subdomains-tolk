@@ -15,7 +15,7 @@ get fun `test factory: create deploys a locked collection + hands off the .ton`(
     val parent = newActor("fparent"); // stand-in for the parent .ton DnsItem
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val expectedColl = factory.getCollectionAddress(parent.address);
     val payload = beginCell()
@@ -28,7 +28,7 @@ get fun `test factory: create deploys a locked collection + hands off the .ton`(
         1,
         owner.address,
         payload,
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
 
@@ -63,7 +63,7 @@ get fun `test factory: underfunded create returns the .ton, deploys nothing`() {
     val parent = newActor("fparent2");
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val payload = beginCell().storeRef(makeMeta().toCell()).endCell().beginParse();
     val res = factory.sendOwnershipAssigned(
@@ -71,7 +71,7 @@ get fun `test factory: underfunded create returns the .ton, deploys nothing`() {
         1,
         owner.address,
         payload,
-        { value: ton("0.1"), bounce: false }, // < MIN_CREATE_VALUE
+        { value: grams("0.1"), bounce: false }, // < MIN_CREATE_VALUE
     );
 
     // the `.ton` is returned to the owner; nothing is deployed
@@ -87,7 +87,7 @@ get fun `test factory: two parents get two distinct collections`() {
     val parentB = newActor("parentB");
 
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(deployer.address, { value: ton("1"), bounce: false });
+    factory.deploy(deployer.address, { value: grams("1"), bounce: false });
 
     val addrA = factory.getCollectionAddress(parentA.address);
     val addrB = factory.getCollectionAddress(parentB.address);

@@ -147,13 +147,13 @@ fun matchesParentTransfer(
         return false;
     }
     return transfer.queryId == pending.deploymentId &&
-    transfer.transferData.newOwnerAddress == newOwner &&
-    transfer.transferData.responseDestination! == responseDestination &&
-    transfer.transferData.customPayload == null &&
-    transfer.transferData.forwardAmount == forwardAmount &&
-    handoff!.deploymentId == pending.deploymentId &&
-    handoff!.requestQueryId == pending.queryId &&
-    handoff!.intendedAdmin == pending.admin;
+        transfer.transferData.newOwnerAddress == newOwner &&
+        transfer.transferData.responseDestination == responseDestination &&
+        transfer.transferData.customPayload == null &&
+        transfer.transferData.forwardAmount == forwardAmount &&
+        handoff.deploymentId == pending.deploymentId &&
+        handoff.requestQueryId == pending.queryId &&
+        handoff.intendedAdmin == pending.admin;
 }
 
 fun saveAndReturnRejectedParent(
@@ -316,7 +316,7 @@ fun onBouncedMessage(in: InMessageBounced) {
         } catch {
             return;
         }
-        val transfer = parsed!;
+        val transfer = parsed;
         val expectedCollection = calcDeployedCollection(
             contract.getAddress(),
             in.senderAddress,
@@ -342,7 +342,7 @@ fun onBouncedMessage(in: InMessageBounced) {
             if (
                 pending.inFlight &&
                 (pending.phase == PHASE_AWAITING_HANDOFF ||
-                pending.phase == PHASE_RETURNING_PARENT) &&
+                    pending.phase == PHASE_RETURNING_PARENT) &&
                 pending.parentDomain == in.senderAddress &&
                 matchesParentTransfer(
                     transfer,
@@ -452,7 +452,7 @@ fun onInternalMessage(in: InMessage) {
         OwnershipAssigned => {
             val parentDomain = in.senderAddress;
             assert (msg.oldOwnerAddress != null) throw ERROR_NULL_OLD_OWNER;
-            val admin = msg.oldOwnerAddress!;
+            val admin = msg.oldOwnerAddress;
             // Validate before dispatch; later failure could strand transferred custody.
             val adminBasechain = admin.getWorkchain() == BASECHAIN;
             val parentBasechain = parentDomain.getWorkchain() == BASECHAIN;

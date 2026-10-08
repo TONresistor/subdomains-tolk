@@ -5,12 +5,12 @@ import "@acton/testing/expect"
 import "@acton/types/transaction"
 import "@contracts/dns-utils"
 import "@contracts/messages"
-import "@contracts/prices"
 import "@contracts/storage"
+import "@tests/default-prices"
 import "@wrappers/SubdomainCollection.gen"
 import "@wrappers/SubdomainItem.gen"
 
-fun newActor(name: string, topUp: coins = ton("1000")): Treasury {
+fun newActor(name: string, topUp: coins = grams("1000")): Treasury {
     val actor = testing.treasury(name);
     if (topUp > 0) {
         testing.topUp(actor.address, topUp);
@@ -107,10 +107,10 @@ fun makeMeta(): CollectionMeta {
 // In unit tests we stand in for the factory with a "master" treasury sending LockCollection.
 // Returns (collection, parentStandIn, admin, user).
 fun deployLockedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury) {
-    val masterT = newActor("master", ton("100")); // stand-in for the factory (= master)
-    val parent = newActor("parent", ton("100"));  // stand-in for the parent .ton DnsItem
-    val owner = newActor("owner", ton("100"));    // previous parent owner -> admin
-    val user = newActor("user", ton("10000"));
+    val masterT = newActor("master", grams("100")); // stand-in for the factory (= master)
+    val parent = newActor("parent", grams("100"));  // stand-in for the parent .ton DnsItem
+    val owner = newActor("owner", grams("100"));    // previous parent owner -> admin
+    val user = newActor("user", grams("10000"));
 
     val coll = SubdomainCollection.fromStorage({
         master: masterT.address,
@@ -118,9 +118,9 @@ fun deployLockedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
         isLinked: false,
         linkedAdmin: masterT.address,
     });
-    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false }); // bare skeleton
+    coll.deploy(masterT.address, { value: grams("0.05"), bounce: false }); // bare skeleton
     expect(testing.isDeployed(coll.address)).toEqual(true);
-    expect(coll.getAdmin()).toEqual(null);                               // not locked yet
+    expect(coll.getAdmin()).toEqual(null);                                 // not locked yet
 
     val lockRes = coll.sendAny(
         masterT.address,
@@ -131,7 +131,7 @@ fun deployLockedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
             isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
     expect(lockRes).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getAdmin()).toEqual(owner.address);
@@ -143,10 +143,10 @@ fun deployLockedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
 // isLinked=true, so the collection lives at its own address and never takes custody of the parent.
 // The "owner" keeps the parent .ton; here `parent` stands in for that still-owner-held .ton.
 fun deployLinkedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury) {
-    val masterT = newActor("master", ton("100"));
-    val parent = newActor("parent", ton("100"));
-    val owner = newActor("owner", ton("100"));
-    val user = newActor("user", ton("10000"));
+    val masterT = newActor("master", grams("100"));
+    val parent = newActor("parent", grams("100"));
+    val owner = newActor("owner", grams("100"));
+    val user = newActor("user", grams("10000"));
 
     val coll = SubdomainCollection.fromStorage({
         master: masterT.address,
@@ -154,7 +154,7 @@ fun deployLinkedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
         isLinked: true,
         linkedAdmin: owner.address,
     });
-    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(masterT.address, { value: grams("0.05"), bounce: false });
     expect(coll.getIsLinked()).toEqual(false); // not locked yet -> default false
     expect(coll.getAutoRenewParent()).toEqual(false);
 
@@ -167,7 +167,7 @@ fun deployLinkedCollection(): (SubdomainCollection, Treasury, Treasury, Treasury
             isLinked: true,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
     expect(lockRes).toHaveSuccessfulTx({ to: coll.address });
     expect(coll.getAdmin()).toEqual(owner.address);
@@ -182,7 +182,7 @@ fun mintSubdomain(
     coll: SubdomainCollection,
     minter: Treasury,
     label: string,
-    value: coins = ton("20"),
+    value: coins = grams("20"),
 ): (SubdomainItem, SendResultList) {
     val res = coll.sendRegisterSubdomain(
         minter.address,

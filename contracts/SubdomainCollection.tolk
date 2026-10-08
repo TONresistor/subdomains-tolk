@@ -52,7 +52,7 @@ fun assertAdmin(senderAddress: address, admin: address) {
 
 fun isValidAccessMode(accessMode: uint8): bool {
     return accessMode == ACCESS_PUBLIC || accessMode == ACCESS_ALLOWLIST ||
-    accessMode == ACCESS_ADMIN_ONLY;
+        accessMode == ACCESS_ADMIN_ONLY;
 }
 
 fun resolveMintAccess(
@@ -64,12 +64,12 @@ fun resolveMintAccess(
         return true;
     }
     return policy.accessMode == ACCESS_PUBLIC ||
-    (policy.accessMode == ACCESS_ALLOWLIST && policy.allowlist.exists(minter));
+        (policy.accessMode == ACCESS_ALLOWLIST && policy.allowlist.exists(minter));
 }
 
 fun isParentHeartbeatDue(storage: CollectionStorage, nowTime: uint32): bool {
     return !storage.isLinked && storage.meta.load().autoRenewParent &&
-    nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL;
+        nowTime - storage.lastParentFillUp > PARENT_HEARTBEAT_INTERVAL;
 }
 
 fun calculateMintFunding(
@@ -89,7 +89,7 @@ fun calculateWithdrawAmount(
     inboundValue: coins,
 ): coins {
     var physical = contract.getOriginalBalance() - inboundValue - COLLECTION_MIN_BALANCE -
-    FWD_FEE_RESERVE;
+        FWD_FEE_RESERVE;
     if (physical < 0) {
         physical = 0;
     }
@@ -397,19 +397,19 @@ fun onBouncedMessage(in: InMessageBounced) {
         } catch {
             return;
         }
-        val returned = transfer!;
+        val returned = transfer;
 
         if (storage.isLinked) {
             var policy = storage.policy.load();
             if (policy.pendingParentReturn == null) {
                 return;
             }
-            var pending = policy.pendingParentReturn!.load();
+            var pending = policy.pendingParentReturn.load();
             if (
                 !pending.inFlight || returned.queryId != pending.returnQueryId ||
                 returned.transferData.newOwnerAddress != pending.recipient ||
                 returned.transferData.responseDestination == null ||
-                returned.transferData.responseDestination! != contract.getAddress() ||
+                returned.transferData.responseDestination != contract.getAddress() ||
                 returned.transferData.customPayload != null ||
                 returned.transferData.forwardAmount != 0 ||
                 !isEmptyTep62ForwardPayload(returned.transferData.forwardPayload)
@@ -427,19 +427,19 @@ fun onBouncedMessage(in: InMessageBounced) {
         if (origin.lastFactoryHandoff == null) {
             return;
         }
-        var receipt = origin.lastFactoryHandoff!.load();
+        var receipt = origin.lastFactoryHandoff.load();
         val handoff = parseFactoryHandoffPayload(returned.transferData.forwardPayload);
         if (
             !receipt.returnRequired || !receipt.returnInFlight || handoff == null ||
             returned.queryId != receipt.deploymentId ||
             returned.transferData.newOwnerAddress != receipt.intendedAdmin ||
             returned.transferData.responseDestination == null ||
-            returned.transferData.responseDestination! != storage.master ||
+            returned.transferData.responseDestination != storage.master ||
             returned.transferData.customPayload != null ||
             returned.transferData.forwardAmount != 0 ||
-            handoff!.deploymentId != receipt.deploymentId ||
-            handoff!.requestQueryId != receipt.requestQueryId ||
-            handoff!.intendedAdmin != receipt.intendedAdmin
+            handoff.deploymentId != receipt.deploymentId ||
+            handoff.requestQueryId != receipt.requestQueryId ||
+            handoff.intendedAdmin != receipt.intendedAdmin
         ) {
             return;
         }
@@ -559,7 +559,7 @@ fun onInternalMessage(in: InMessage) {
 
             if (storage.isLinked) {
                 assert (assigned.oldOwnerAddress != null) throw ERROR_NULL_OLD_OWNER;
-                val claimant = assigned.oldOwnerAddress!;
+                val claimant = assigned.oldOwnerAddress;
                 val parsedAction = parseLinkedParentAction(assigned.payload);
                 if (parsedAction == null) {
                     beginParentReturn(
@@ -570,7 +570,7 @@ fun onInternalMessage(in: InMessage) {
                     );
                     return;
                 }
-                val action = parsedAction!;
+                val action = parsedAction;
 
                 if (action.action == LINKED_ACTION_CONVERT_LOCKED) {
                     var policy = storage.policy.load();
@@ -610,33 +610,33 @@ fun onInternalMessage(in: InMessage) {
             var factoryReceipt: FactoryHandoffReceipt? = null;
             val handoff = parseFactoryHandoffPayload(assigned.payload);
             if (
-                assigned.oldOwnerAddress != null && assigned.oldOwnerAddress! == storage.master &&
+                assigned.oldOwnerAddress != null && assigned.oldOwnerAddress == storage.master &&
                 handoff != null
             ) {
-                assert (handoff!.deploymentId == assigned.queryId) throw ERROR_NOT_FROM_MASTER;
+                assert (handoff.deploymentId == assigned.queryId) throw ERROR_NOT_FROM_MASTER;
                 factoryReceipt = FactoryHandoffReceipt {
-                    deploymentId: handoff!.deploymentId,
-                    requestQueryId: handoff!.requestQueryId,
-                    intendedAdmin: handoff!.intendedAdmin,
-                    returnRequired: handoff!.intendedAdmin != storage.admin,
-                    returnInFlight: handoff!.intendedAdmin != storage.admin,
+                    deploymentId: handoff.deploymentId,
+                    requestQueryId: handoff.requestQueryId,
+                    intendedAdmin: handoff.intendedAdmin,
+                    returnRequired: handoff.intendedAdmin != storage.admin,
+                    returnInFlight: handoff.intendedAdmin != storage.admin,
                 };
                 var updatedOrigin = storage.origin.load();
-                updatedOrigin.lastFactoryHandoff = factoryReceipt!.toCell();
+                updatedOrigin.lastFactoryHandoff = factoryReceipt.toCell();
                 storage.origin = updatedOrigin.toCell();
                 storage.save();
             }
 
             // Return a re-auctioned parent when the active registry has a different admin.
-            if (factoryReceipt != null && factoryReceipt!.returnRequired) {
+            if (factoryReceipt != null && factoryReceipt.returnRequired) {
                 val returnParent = createMessage({
                     bounce: BounceMode.RichBounce,
                     dest: storage.parentDomain,
                     value: 0,
                     body: TransferOwnership {
-                        queryId: factoryReceipt!.deploymentId,
+                        queryId: factoryReceipt.deploymentId,
                         transferData: {
-                            newOwnerAddress: factoryReceipt!.intendedAdmin,
+                            newOwnerAddress: factoryReceipt.intendedAdmin,
                             // The factory keeps pending until this canonical parent acknowledgement.
                             responseDestination: storage.master,
                             customPayload: null,
@@ -645,9 +645,9 @@ fun onInternalMessage(in: InMessage) {
                                 .storeBool(true)
                                 .storeRef(
                                     FactoryHandoff {
-                                        deploymentId: factoryReceipt!.deploymentId,
-                                        requestQueryId: factoryReceipt!.requestQueryId,
-                                        intendedAdmin: factoryReceipt!.intendedAdmin,
+                                        deploymentId: factoryReceipt.deploymentId,
+                                        requestQueryId: factoryReceipt.requestQueryId,
+                                        intendedAdmin: factoryReceipt.intendedAdmin,
                                     }.toCell(),
                                 )
                                 .endCell()
@@ -665,7 +665,7 @@ fun onInternalMessage(in: InMessage) {
                 SEND_MODE_PAY_FEES_SEPARATELY | SEND_MODE_IGNORE_ERRORS,
             );
             if (factoryReceipt != null) {
-                notifyParentHandoffComplete(storage.master, storage.parentDomain, factoryReceipt!);
+                notifyParentHandoffComplete(storage.master, storage.parentDomain, factoryReceipt);
             }
         }
         return;
@@ -676,9 +676,9 @@ fun onInternalMessage(in: InMessage) {
         var policy = storage.policy.load();
         if (
             in.senderAddress == storage.parentDomain && policy.pendingParentReturn != null &&
-            policy.pendingParentReturn!.load().returnQueryId == acknowledgement.queryId
+            policy.pendingParentReturn.load().returnQueryId == acknowledgement.queryId
         ) {
-            val pending = policy.pendingParentReturn!.load();
+            val pending = policy.pendingParentReturn.load();
             policy.pendingParentReturn = null;
             storage.policy = policy.toCell();
             storage.save();
@@ -926,7 +926,7 @@ fun onInternalMessage(in: InMessage) {
             if (origin.lastFactoryHandoff == null) {
                 return;
             }
-            var receipt = origin.lastFactoryHandoff!.load();
+            var receipt = origin.lastFactoryHandoff.load();
             if (
                 receipt.deploymentId != msg.deploymentId || receipt.requestQueryId != msg.queryId ||
                 receipt.intendedAdmin != msg.intendedAdmin
@@ -981,7 +981,7 @@ fun onInternalMessage(in: InMessage) {
             var policy = storage.policy.load();
             assert (storage.isLinked) throw ERROR_LINKED_NO_CUSTODY;
             assert (policy.pendingParentReturn != null) throw ERROR_NO_PARENT_RETURN;
-            var pending = policy.pendingParentReturn!.load();
+            var pending = policy.pendingParentReturn.load();
             assert (!pending.inFlight) throw ERROR_PARENT_TRANSFER_IN_FLIGHT;
             assert (in.valueCoins >= MIN_PARENT_RETURN_VALUE) throw ERROR_INSUFFICIENT_BALANCE;
             pending.inFlight = true;
@@ -1127,15 +1127,15 @@ get fun get_mint_quote(wallet: address, charCount: int): MintQuoteReply {
     }
     val effectivePrice = config.priceForCharCount(charCount);
     val allowed = wallet.getWorkchain() == BASECHAIN &&
-    resolveMintAccess(policy, storage.admin, wallet);
+        resolveMintAccess(policy, storage.admin, wallet);
     return {
         allowed,
         effectivePrice,
         requiredValue: effectivePrice +
-        calculateMintFunding(
-            storage,
-            blockchain.now(),
-        ),
+            calculateMintFunding(
+                storage,
+                blockchain.now(),
+            ),
     };
 }
 
@@ -1160,7 +1160,7 @@ get fun get_parent_return(): ParentReturnReply {
             inFlight: false,
         };
     }
-    val pending = pendingCell!.load();
+    val pending = pendingCell.load();
     return {
         pending: true,
         returnQueryId: pending.returnQueryId,

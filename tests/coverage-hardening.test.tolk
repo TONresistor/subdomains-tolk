@@ -23,48 +23,48 @@ fun sendCreate(grid: PriceConfig): SendResultList {
     val owner = newActor("cgo");
     val parent = newActor("cgp");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
     return factory.sendOwnershipAssigned(
         parent.address,
         1,
         owner.address,
         gridPayload(grid),
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
 }
 
 // every price tier is reachable and returns the configured value
 get fun `test cover: price tiers map every label length`() {
     val (coll, _parent, _owner, _user) = deployLockedCollection();
-    expect(coll.getPrice(1)).toEqual(ton("100"));
-    expect(coll.getPrice(2)).toEqual(ton("50"));
-    expect(coll.getPrice(3)).toEqual(ton("20"));
-    expect(coll.getPrice(4)).toEqual(ton("10"));
-    expect(coll.getPrice(5)).toEqual(ton("5"));
-    expect(coll.getPrice(6)).toEqual(ton("4"));
-    expect(coll.getPrice(7)).toEqual(ton("3"));
-    expect(coll.getPrice(8)).toEqual(ton("2"));
-    expect(coll.getPrice(9)).toEqual(ton("1"));
-    expect(coll.getPrice(10)).toEqual(ton("0.5"));
-    expect(coll.getPrice(11)).toEqual(ton("0.1"));
-    expect(coll.getPrice(50)).toEqual(ton("0.1")); // 11+ clamps to pRest
+    expect(coll.getPrice(1)).toEqual(grams("100"));
+    expect(coll.getPrice(2)).toEqual(grams("50"));
+    expect(coll.getPrice(3)).toEqual(grams("20"));
+    expect(coll.getPrice(4)).toEqual(grams("10"));
+    expect(coll.getPrice(5)).toEqual(grams("5"));
+    expect(coll.getPrice(6)).toEqual(grams("4"));
+    expect(coll.getPrice(7)).toEqual(grams("3"));
+    expect(coll.getPrice(8)).toEqual(grams("2"));
+    expect(coll.getPrice(9)).toEqual(grams("1"));
+    expect(coll.getPrice(10)).toEqual(grams("0.5"));
+    expect(coll.getPrice(11)).toEqual(grams("0.1"));
+    expect(coll.getPrice(50)).toEqual(grams("0.1")); // 11+ clamps to pRest
 }
 
 // grid validation: a non-monotonic grid is refused at create (refund, no deploy)
 get fun `test cover: create refuses a non-monotonic price grid`() {
     val nonMono: PriceConfig = {
         minChars: 4,
-        p1: ton("10"),
-        p2: ton("10"),
-        p3: ton("10"),
-        p4: ton("1"),
-        p5: ton("10"),
-        p6: ton("4"),
-        p7: ton("3"),
-        p8: ton("2"),
-        p9: ton("1"),
-        p10: ton("0.5"),
-        pRest: ton("0.1"),
+        p1: grams("10"),
+        p2: grams("10"),
+        p3: grams("10"),
+        p4: grams("1"),
+        p5: grams("10"),
+        p6: grams("4"),
+        p7: grams("3"),
+        p8: grams("2"),
+        p9: grams("1"),
+        p10: grams("0.5"),
+        pRest: grams("0.1"),
     };
     val res = sendCreate(nonMono);
     expect(res.findTransaction({ deploy: true })).toEqual(null);
@@ -74,17 +74,17 @@ get fun `test cover: create refuses a non-monotonic price grid`() {
 get fun `test cover: create accepts a price below the former floor`() {
     val belowFloor: PriceConfig = {
         minChars: 4,
-        p1: ton("100"),
-        p2: ton("50"),
-        p3: ton("20"),
-        p4: ton("10"),
-        p5: ton("5"),
-        p6: ton("4"),
-        p7: ton("3"),
-        p8: ton("2"),
-        p9: ton("1"),
-        p10: ton("0.5"),
-        pRest: ton("0.04"),
+        p1: grams("100"),
+        p2: grams("50"),
+        p3: grams("20"),
+        p4: grams("10"),
+        p5: grams("5"),
+        p6: grams("4"),
+        p7: grams("3"),
+        p8: grams("2"),
+        p9: grams("1"),
+        p10: grams("0.5"),
+        pRest: grams("0.04"),
     };
     val res = sendCreate(belowFloor);
     expect(res.findTransaction({ deploy: true })).toBeNotNull();
@@ -93,17 +93,17 @@ get fun `test cover: create accepts a price below the former floor`() {
 get fun `test cover: create accepts a monotonic equal-price grid`() {
     val atFloor: PriceConfig = {
         minChars: 4,
-        p1: ton("0.05"),
-        p2: ton("0.05"),
-        p3: ton("0.05"),
-        p4: ton("0.05"),
-        p5: ton("0.05"),
-        p6: ton("0.05"),
-        p7: ton("0.05"),
-        p8: ton("0.05"),
-        p9: ton("0.05"),
-        p10: ton("0.05"),
-        pRest: ton("0.05"),
+        p1: grams("0.05"),
+        p2: grams("0.05"),
+        p3: grams("0.05"),
+        p4: grams("0.05"),
+        p5: grams("0.05"),
+        p6: grams("0.05"),
+        p7: grams("0.05"),
+        p8: grams("0.05"),
+        p9: grams("0.05"),
+        p10: grams("0.05"),
+        pRest: grams("0.05"),
     };
     val res = sendCreate(atFloor);
     expect(res.findTransaction({ deploy: true })).toBeNotNull();
@@ -111,31 +111,31 @@ get fun `test cover: create accepts a monotonic equal-price grid`() {
 
 // a registry can set a custom minimum length (here 2): "ab" mints, "a" is rejected
 get fun `test cover: registry can set a 2-char minimum`() {
-    val masterT = newActor("m2", ton("100"));
-    val parent = newActor("p2", ton("100"));
-    val owner = newActor("o2", ton("100"));
-    val user = newActor("u2", ton("10000"));
+    val masterT = newActor("m2", grams("100"));
+    val parent = newActor("p2", grams("100"));
+    val owner = newActor("o2", grams("100"));
+    val user = newActor("u2", grams("10000"));
     val coll = SubdomainCollection.fromStorage({
         master: masterT.address,
         parentDomain: parent.address,
         isLinked: false,
         linkedAdmin: masterT.address,
     });
-    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(masterT.address, { value: grams("0.05"), bounce: false });
 
     val grid: PriceConfig = {
         minChars: 2,
-        p1: ton("10"),
-        p2: ton("10"),
-        p3: ton("10"),
-        p4: ton("10"),
-        p5: ton("5"),
-        p6: ton("4"),
-        p7: ton("3"),
-        p8: ton("2"),
-        p9: ton("1"),
-        p10: ton("0.5"),
-        pRest: ton("0.1"),
+        p1: grams("10"),
+        p2: grams("10"),
+        p3: grams("10"),
+        p4: grams("10"),
+        p5: grams("5"),
+        p6: grams("4"),
+        p7: grams("3"),
+        p8: grams("2"),
+        p9: grams("1"),
+        p10: grams("0.5"),
+        pRest: grams("0.1"),
     };
     var meta = makeMeta();
     meta.priceConfig = grid.toCell();
@@ -148,7 +148,7 @@ get fun `test cover: registry can set a 2-char minimum`() {
             isLinked: false,
             meta: meta.toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
 
     expect(coll.getMinChars()).toEqual(2);
@@ -162,7 +162,7 @@ get fun `test cover: registry can set a 2-char minimum`() {
         labelSlice("a"),
         true,
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(one).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_SHORT });
 }
@@ -171,17 +171,17 @@ get fun `test cover: registry can set a 2-char minimum`() {
 get fun `test cover: create refuses an out-of-range minChars`() {
     val bad: PriceConfig = {
         minChars: 5, // > MAX_MIN_CHARS (4)
-        p1: ton("100"),
-        p2: ton("50"),
-        p3: ton("20"),
-        p4: ton("10"),
-        p5: ton("5"),
-        p6: ton("4"),
-        p7: ton("3"),
-        p8: ton("2"),
-        p9: ton("1"),
-        p10: ton("0.5"),
-        pRest: ton("0.1"),
+        p1: grams("100"),
+        p2: grams("50"),
+        p3: grams("20"),
+        p4: grams("10"),
+        p5: grams("5"),
+        p6: grams("4"),
+        p7: grams("3"),
+        p8: grams("2"),
+        p9: grams("1"),
+        p10: grams("0.5"),
+        pRest: grams("0.1"),
     };
     val res = sendCreate(bad);
     expect(res.findTransaction({ deploy: true })).toEqual(null);
@@ -189,31 +189,31 @@ get fun `test cover: create refuses an out-of-range minChars`() {
 
 // 1-char names price at their OWN tier (p1), distinct from the 4-char tier (p4)
 get fun `test cover: short names price at their own tier`() {
-    val masterT = newActor("m1", ton("100"));
-    val parent = newActor("p1c", ton("100"));
-    val owner = newActor("o1", ton("100"));
-    val user = newActor("u1", ton("10000"));
+    val masterT = newActor("m1", grams("100"));
+    val parent = newActor("p1c", grams("100"));
+    val owner = newActor("o1", grams("100"));
+    val user = newActor("u1", grams("10000"));
     val coll = SubdomainCollection.fromStorage({
         master: masterT.address,
         parentDomain: parent.address,
         isLinked: false,
         linkedAdmin: masterT.address,
     });
-    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(masterT.address, { value: grams("0.05"), bounce: false });
 
     val grid: PriceConfig = {
         minChars: 1,
-        p1: ton("50"),
-        p2: ton("20"),
-        p3: ton("15"),
-        p4: ton("10"),
-        p5: ton("5"),
-        p6: ton("4"),
-        p7: ton("3"),
-        p8: ton("2"),
-        p9: ton("1"),
-        p10: ton("0.5"),
-        pRest: ton("0.1"),
+        p1: grams("50"),
+        p2: grams("20"),
+        p3: grams("15"),
+        p4: grams("10"),
+        p5: grams("5"),
+        p6: grams("4"),
+        p7: grams("3"),
+        p8: grams("2"),
+        p9: grams("1"),
+        p10: grams("0.5"),
+        pRest: grams("0.1"),
     };
     var meta = makeMeta();
     meta.priceConfig = grid.toCell();
@@ -226,12 +226,12 @@ get fun `test cover: short names price at their own tier`() {
             isLinked: false,
             meta: meta.toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
 
     expect(coll.getMinChars()).toEqual(1);
-    expect(coll.getPrice(1)).toEqual(ton("50")); // p1, distinct from p4 (10)
-    expect(coll.getPrice(3)).toEqual(ton("15")); // p3
+    expect(coll.getPrice(1)).toEqual(grams("50")); // p1, distinct from p4 (10)
+    expect(coll.getPrice(3)).toEqual(grams("15")); // p3
 
     // funding below p1 is rejected; above it mints
     val low = coll.sendRegisterSubdomain(
@@ -240,10 +240,10 @@ get fun `test cover: short names price at their own tier`() {
         labelSlice("x"),
         true,
         testOnchainMetadata(),
-        { value: ton("40"), bounce: true },
+        { value: grams("40"), bounce: true },
     ); // < 50
     expect(low).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
-    val (item, _r) = mintSubdomain(coll, user, "x", ton("60"));
+    val (item, _r) = mintSubdomain(coll, user, "x", grams("60"));
     expect(testing.isDeployed(item.address)).toEqual(true);
 }
 
@@ -259,7 +259,7 @@ get fun `test cover: non-byte-aligned label is rejected`() {
         ragged,
         true,
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
 }
@@ -274,7 +274,7 @@ get fun `test cover: hyphen allowed interior, rejected at the edge`() {
         labelSlice("-abcd"),
         true,
         testOnchainMetadata(),
-        { value: ton("50"), bounce: true },
+        { value: grams("50"), bounce: true },
     );
     expect(lead).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
 
@@ -287,7 +287,7 @@ get fun `test cover: item answers GetStaticData with ReportStaticData`() {
     val (coll, _parent, _owner, user) = deployLockedCollection();
     val (item, _r) = mintSubdomain(coll, user, "alice");
 
-    val res = item.sendGetStaticData(user.address, 9, { value: ton("0.1"), bounce: true });
+    val res = item.sendGetStaticData(user.address, 9, { value: grams("0.1"), bounce: true });
     expect(res).toHaveSuccessfulTx({ to: item.address });
     expect(
         res.findTransaction<ReportStaticData>({ from: item.address, to: user.address }),
@@ -305,7 +305,7 @@ get fun `test cover: an item record edit persists`() {
         1,
         CAT_SITE,
         beginCell().storeRef(siteRec).endCell().beginParse(),
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(setRes).toHaveSuccessfulTx({ to: item.address });
 
@@ -315,15 +315,15 @@ get fun `test cover: an item record edit persists`() {
 
 // every read getter is safe on an unlocked (skeleton) collection
 get fun `test cover: getters are safe on a skeleton collection`() {
-    val masterT = newActor("skm", ton("10"));
-    val parent = newActor("skp", ton("10"));
+    val masterT = newActor("skm", grams("10"));
+    val parent = newActor("skp", grams("10"));
     val coll = SubdomainCollection.fromStorage({
         master: masterT.address,
         parentDomain: parent.address,
         isLinked: false,
         linkedAdmin: masterT.address,
     });
-    coll.deploy(masterT.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(masterT.address, { value: grams("0.05"), bounce: false });
     expect(coll.isLocked()).toEqual(false);
 
     expect(coll.getAdmin()).toEqual(null);
@@ -363,7 +363,7 @@ get fun `test cover: a locked collection rejects a re-lock`() {
             isLinked: false,
             meta: makeMeta().toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: true },
+        { value: grams("1"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_NOT_FROM_MASTER });
     expect(coll.getAdmin()).toEqual(owner.address); // admin unchanged
@@ -373,12 +373,12 @@ get fun `test cover: a locked collection rejects a re-lock`() {
 get fun `test cover: factory ignores an empty-body top-up`() {
     val someone = newActor("ftu");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(someone.address, { value: ton("1"), bounce: false });
+    factory.deploy(someone.address, { value: grams("1"), bounce: false });
 
     val res = factory.sendAny(
         someone.address,
         beginCell().endCell(),
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
@@ -388,12 +388,12 @@ get fun `test cover: factory ignores an empty-body top-up`() {
 get fun `test cover: factory ignores an Excesses top-up`() {
     val someone = newActor("fex");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(someone.address, { value: ton("1"), bounce: false });
+    factory.deploy(someone.address, { value: grams("1"), bounce: false });
 
     val res = factory.sendAny(
         someone.address,
         Excesses { queryId: 1 }.toCell(),
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
     expect(res).toHaveSuccessfulTx({ to: factory.address });
 }
@@ -403,7 +403,7 @@ get fun `test cover: factory refunds a transfer that carries no config`() {
     val owner = newActor("ncfo");
     val parent = newActor("ncfp");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     // sufficient value, but the forward payload has no meta ref -> must refund (not deploy)
     val res = factory.sendOwnershipAssigned(
@@ -411,7 +411,7 @@ get fun `test cover: factory refunds a transfer that carries no config`() {
         1,
         owner.address,
         emptyPayload(),
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
     expect(
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
@@ -422,11 +422,11 @@ get fun `test cover: factory refunds a transfer that carries no config`() {
 // v3 withdraws accounted revenue without sweeping operational funding or accidental top-ups.
 get fun `test cover: withdraw-all releases accounted revenue only`() {
     val (coll, _parent, owner, user) = deployLockedCollection();
-    val (item, mintResult) = mintSubdomain(coll, user, "alice", ton("20"));
+    val (item, mintResult) = mintSubdomain(coll, user, "alice", grams("20"));
     expect(mintResult).toHaveSuccessfulTx({ from: item.address, to: coll.address });
-    expect(coll.getWithdrawableRevenue()).toEqual(ton("5"));
+    expect(coll.getWithdrawableRevenue()).toEqual(grams("5"));
 
-    val res = coll.sendWithdrawFees(owner.address, 1, 0, { value: ton("0.05"), bounce: true });
+    val res = coll.sendWithdrawFees(owner.address, 1, 0, { value: grams("0.05"), bounce: true });
     expect(res).toHaveSuccessfulTx({ from: coll.address, to: owner.address });
 
     val kept = testing.getAccountBalance(coll.address);

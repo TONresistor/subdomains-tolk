@@ -23,7 +23,7 @@ get fun `test elite: masterchain minter is rejected, label stays free`() {
         labelSlice("alice"),
         true,
         testOnchainMetadata(),
-        { value: ton("20"), bounce: true },
+        { value: grams("20"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_WRONG_WORKCHAIN });
 
@@ -37,21 +37,21 @@ get fun `test elite: factory deploys a zero-price collection`() {
     val owner = newActor("dgo");
     val parent = newActor("dgp");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val freeGrid: PriceConfig = {
         minChars: 4,
-        p1: ton("0"),
-        p2: ton("0"),
-        p3: ton("0"),
-        p4: ton("0"),
-        p5: ton("0"),
-        p6: ton("0"),
-        p7: ton("0"),
-        p8: ton("0"),
-        p9: ton("0"),
-        p10: ton("0"),
-        pRest: ton("0"),
+        p1: grams("0"),
+        p2: grams("0"),
+        p3: grams("0"),
+        p4: grams("0"),
+        p5: grams("0"),
+        p6: grams("0"),
+        p7: grams("0"),
+        p8: grams("0"),
+        p9: grams("0"),
+        p10: grams("0"),
+        pRest: grams("0"),
     };
     var freeMeta = makeMeta();
     freeMeta.priceConfig = freeGrid.toCell();
@@ -62,7 +62,7 @@ get fun `test elite: factory deploys a zero-price collection`() {
         1,
         owner.address,
         payload,
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
     expect(res.findTransaction({ deploy: true })).toBeNotNull();
 }
@@ -92,7 +92,7 @@ get fun `test elite: transfer_admin rejects a masterchain admin`() {
     val (coll, _parent, owner, _user) = deployLockedCollection();
     val mc = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("mcadmin"));
 
-    val res = coll.sendTransferAdmin(owner.address, 1, mc, { value: ton("1"), bounce: true });
+    val res = coll.sendTransferAdmin(owner.address, 1, mc, { value: grams("1"), bounce: true });
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_WRONG_WORKCHAIN });
     expect(coll.getAdmin()).toEqual(owner.address); // unchanged
 }
@@ -106,7 +106,7 @@ get fun `test elite: TEP-66 royalty params are exposed (0%, conformant)`() {
     expect(den).toEqual(1000);
     expect(dest).toEqual(owner.address);
 
-    val res = coll.sendGetRoyaltyParams(user.address, 1, { value: ton("0.1"), bounce: true });
+    val res = coll.sendGetRoyaltyParams(user.address, 1, { value: grams("0.1"), bounce: true });
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(
         res.findTransaction<ReportRoyaltyParams>({ from: coll.address, to: user.address }),
@@ -119,7 +119,7 @@ get fun `test elite: TEP-66 royalty params are exposed (0%, conformant)`() {
 get fun `test elite: masterchain-owned .ton is refunded, not stranded`() {
     val parent = newActor("mcp");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(parent.address, { value: ton("1"), bounce: false });
+    factory.deploy(parent.address, { value: grams("1"), bounce: false });
 
     val mcAdmin = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("mcown"));
     val payload = beginCell()
@@ -132,7 +132,7 @@ get fun `test elite: masterchain-owned .ton is refunded, not stranded`() {
         1,
         mcAdmin,
         payload,
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
     expect(
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
@@ -146,7 +146,7 @@ get fun `test elite: masterchain-owned .ton is refunded, not stranded`() {
 get fun `test elite: masterchain parent is refunded and never deployed`() {
     val owner = newActor("mc-parent-owner");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val mcParent = address.fromWorkchainAndHash(MASTERCHAIN, labelIndex("mc-parent"));
     val payload = beginCell().storeRef(makeMeta().toCell()).endCell().beginParse();
@@ -155,7 +155,7 @@ get fun `test elite: masterchain parent is refunded and never deployed`() {
         2,
         owner.address,
         payload,
-        { value: ton("0.5"), bounce: false },
+        { value: grams("0.5"), bounce: false },
     );
 
     expect(
@@ -182,7 +182,7 @@ get fun `test elite: item rejects a missing TEP-62 Either selector`() {
     val result = item.sendAny(
         user.address,
         malformed.toCell(),
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(result).toHaveFailedTx({
         to: item.address,
@@ -212,7 +212,7 @@ get fun `test elite: item rejects a malformed TEP-62 ref payload`() {
             forwardAmount: 0,
             forwardPayload: malformedPayload,
         },
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(result).toHaveFailedTx({
         to: item.address,
@@ -238,10 +238,10 @@ get fun `test elite: item accepts a valid TEP-62 ref payload`() {
             newOwnerAddress: buyer.address,
             responseDestination: user.address,
             customPayload: null,
-            forwardAmount: ton("0.01"),
+            forwardAmount: grams("0.01"),
             forwardPayload: payload,
         },
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(result).toHaveSuccessfulTx({ to: item.address });
     expect(result).toHaveSuccessfulTx({ from: item.address, to: buyer.address });
@@ -256,7 +256,7 @@ get fun `test elite: rescue interoperates with a strict TEP-62 item`() {
         user.address,
         3,
         makeTransferData(coll.address, user.address, 0),
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(deposit).toHaveSuccessfulTx({ to: item.address });
     expect(item.getEditor()).toEqual(coll.address);
@@ -266,7 +266,7 @@ get fun `test elite: rescue interoperates with a strict TEP-62 item`() {
         4,
         item.address,
         user.address,
-        { value: ton("0.2"), bounce: true },
+        { value: grams("0.2"), bounce: true },
     );
     expect(rescue).toHaveSuccessfulTx({ from: coll.address, to: item.address });
     expect(item.getEditor()).toEqual(user.address);
@@ -281,6 +281,6 @@ get fun `test elite: mint quote rejects a masterchain wallet`() {
 
     val quote = coll.getMintQuote(masterchainWallet, 5);
     expect(quote.allowed).toEqual(false);
-    expect(quote.effectivePrice).toEqual(ton("5"));
-    expect(quote.requiredValue).toEqual(ton("5") + ITEM_DEPLOY_COST + MINT_FEE_BUFFER);
+    expect(quote.effectivePrice).toEqual(grams("5"));
+    expect(quote.requiredValue).toEqual(grams("5") + ITEM_DEPLOY_COST + MINT_FEE_BUFFER);
 }

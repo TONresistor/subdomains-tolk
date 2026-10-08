@@ -14,7 +14,7 @@ import "@wrappers/SubdomainItem.gen"
 import "test-utils"
 
 // "alice" = 5 chars -> default price 5 TON. Required = price + deploy + buffer.
-const ALICE_PRICE = ton("5")
+const ALICE_PRICE = grams("5")
 const REQUIRED = ALICE_PRICE + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
 const TEN_YEARS = 10 * 365 * 24 * 60 * 60
 
@@ -39,17 +39,17 @@ fun deployFreeCollection(
     isLinked: bool,
     autoRenewParent: bool = true,
 ): (SubdomainCollection, Treasury, Treasury, Treasury) {
-    val master = newActor("free-master", ton("100"));
-    val parent = newActor("free-parent", ton("100"));
-    val owner = newActor("free-owner", ton("100"));
-    val user = newActor("free-user", ton("100"));
+    val master = newActor("free-master", grams("100"));
+    val parent = newActor("free-parent", grams("100"));
+    val owner = newActor("free-owner", grams("100"));
+    val user = newActor("free-user", grams("100"));
     val coll = SubdomainCollection.fromStorage({
         master: master.address,
         parentDomain: parent.address,
         isLinked,
         linkedAdmin: isLinked ? owner.address : master.address,
     });
-    coll.deploy(master.address, { value: ton("0.05"), bounce: false });
+    coll.deploy(master.address, { value: grams("0.05"), bounce: false });
     var meta = makeMeta();
     meta.priceConfig = zeroPriceConfig().toCell();
     meta.autoRenewParent = autoRenewParent;
@@ -62,7 +62,7 @@ fun deployFreeCollection(
             isLinked,
             meta: meta.toCell(),
         }.toCell(),
-        { value: ton("1"), bounce: false },
+        { value: grams("1"), bounce: false },
     );
     expect(locked).toHaveSuccessfulTx({ to: coll.address });
     return (coll, parent, owner, user);
@@ -83,8 +83,8 @@ get fun `test economics: a freshly-minted item holds the small deposit, not 1 TO
 
     // The item keeps the small deployment reserve, not the old 1.1/1 TON of dead capital.
     val bal = testing.getAccountBalance(item.address);
-    expect(bal > ton("0.04")).toEqual(true);
-    expect(bal < ton("0.1")).toEqual(true);
+    expect(bal > grams("0.04")).toEqual(true);
+    expect(bal < grams("0.1")).toEqual(true);
 }
 
 get fun `test economics: overpayment is refunded to the buyer (only the price is kept)`() {
@@ -92,7 +92,7 @@ get fun `test economics: overpayment is refunded to the buyer (only the price is
 
     // Send 20 TON for a 5 TON name; the ~14.9 excess must come back to the buyer.
     val before = testing.getAccountBalance(user.address);
-    val (item, res) = mintSubdomain(coll, user, "alice", ton("20"));
+    val (item, res) = mintSubdomain(coll, user, "alice", grams("20"));
     expect(testing.isDeployed(item.address)).toEqual(true);
 
     // a refund message went back to the buyer...
@@ -100,8 +100,8 @@ get fun `test economics: overpayment is refunded to the buyer (only the price is
 
     // ...crediting back the overpayment above the quoted price and execution funding.
     val refundReceived = testing.getAccountBalance(user.address) - before;
-    expect(refundReceived > ton("14.85")).toEqual(true);
-    expect(refundReceived < ton("14.95")).toEqual(true);
+    expect(refundReceived > grams("14.85")).toEqual(true);
+    expect(refundReceived < grams("14.95")).toEqual(true);
 }
 
 get fun `test economics: exact funding mints with no refund`() {
@@ -122,18 +122,18 @@ get fun `test economics: under the price+deploy+buffer floor is rejected`() {
         labelSlice("alice"),
         true,
         testOnchainMetadata(),
-        { value: REQUIRED - ton("0.01"), bounce: true },
+        { value: REQUIRED - grams("0.01"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
 }
 
 get fun `test economics: admin withdraws real revenue (no longer stranded by a 1 TON floor)`() {
     val (coll, _parent, owner, user) = deployLockedCollection();
-    mintSubdomain(coll, user, "alice", ton("20")); // 5 TON price now sits on the collection
+    mintSubdomain(coll, user, "alice", grams("20")); // 5 TON price now sits on the collection
 
     // Old keep was 1.07 TON, so withdraw returned ~0 for cheap sales. Now the admin collects the revenue.
     val before = testing.getAccountBalance(owner.address);
-    val res = coll.sendWithdrawFees(owner.address, 1, 0, { value: ton("1"), bounce: true });
+    val res = coll.sendWithdrawFees(owner.address, 1, 0, { value: grams("1"), bounce: true });
     expect(res).toHaveSuccessfulTx({ from: coll.address, to: owner.address });
     val after = testing.getAccountBalance(owner.address);
     expect(after > before).toEqual(true);

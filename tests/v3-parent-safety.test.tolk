@@ -142,7 +142,7 @@ get fun `test v3 parent safety: Factory retry probes but never duplicates an in-
     val owner = newActor("v3-factory-inflight-owner");
     val parent = newActor("v3-factory-inflight-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val create = testing.processSingleTraceStep(
         parent.address,
@@ -232,7 +232,7 @@ get fun `test v3 parent safety: Factory return retry requires bounce and persist
     val owner = newActor("v3-factory-return-owner");
     val parent = newActor("v3-factory-return-parent");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
-    factory.deploy(owner.address, { value: ton("1"), bounce: false });
+    factory.deploy(owner.address, { value: grams("1"), bounce: false });
 
     val create = testing.processSingleTraceStep(
         parent.address,
@@ -262,7 +262,7 @@ get fun `test v3 parent safety: Factory return retry requires bounce and persist
         owner.address,
         1101,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(duplicateBeforeBounce).toHaveFailedTx({
         to: factory.address,
@@ -286,7 +286,7 @@ get fun `test v3 parent safety: Factory return retry requires bounce and persist
         createMessage({
             bounce: true,
             dest: factory.address,
-            value: ton("0.5"),
+            value: grams("0.5"),
             body: RetryCollectionDeployment {
                 queryId: 1102,
                 collectionAddress,
@@ -300,7 +300,7 @@ get fun `test v3 parent safety: Factory return retry requires bounce and persist
         owner.address,
         1103,
         collectionAddress,
-        { value: ton("0.5"), bounce: true },
+        { value: grams("0.5"), bounce: true },
     );
     expect(duplicateAfterRetry).toHaveFailedTx({
         to: factory.address,
@@ -346,7 +346,7 @@ get fun `test v3 parent safety: Factory handoff accepts inline and rejects malfo
             oldOwnerAddress: inlineMaster,
             payload: inline,
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(
         accepted.findTransaction<ParentHandoffComplete>({
@@ -374,7 +374,7 @@ get fun `test v3 parent safety: Factory handoff accepts inline and rejects malfo
             oldOwnerAddress: inlineMaster,
             payload: malformed,
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     expect(
         rejected.findTransaction<ParentHandoffComplete>({ from: inlineCollection.address }),
@@ -391,7 +391,7 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
         isLinked: true,
         linkedAdmin: skeletonOwner.address,
     });
-    skeleton.deploy(master.address, { value: ton("0.1"), bounce: false });
+    skeleton.deploy(master.address, { value: grams("0.1"), bounce: false });
     val skeletonReturn: TransferOwnership = {
         queryId: 1,
         transferData: {
@@ -407,8 +407,8 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
         createMessage({
             bounce: false,
             dest: skeleton.address,
-            value: ton("0.01"),
-            body: parentSafetyRichBounceBody(skeletonReturn.toCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: parentSafetyRichBounceBody(skeletonReturn.toCell(), grams("0.01")),
         }).bounced(),
     );
     expect(skeletonBounce).toHaveSuccessfulTx({ to: skeleton.address });
@@ -419,8 +419,8 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.01"),
-            body: parentSafetyRichBounceBody(skeletonReturn.toCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: parentSafetyRichBounceBody(skeletonReturn.toCell(), grams("0.01")),
         }).bounced(),
     );
     expect(noPendingBounce).toHaveSuccessfulTx({ to: collection.address });
@@ -451,8 +451,8 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.01"),
-            body: parentSafetyRichBounceBody(exactReturn.toCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: parentSafetyRichBounceBody(exactReturn.toCell(), grams("0.01")),
         }).bounced(),
     );
     expect(collection.getParentReturn().inFlight).toEqual(true);
@@ -468,8 +468,8 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.01"),
-            body: parentSafetyRichBounceBody(malformedPayload.toCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: parentSafetyRichBounceBody(malformedPayload.toCell(), grams("0.01")),
         }).bounced(),
     );
     expect(collection.getParentReturn().inFlight).toEqual(true);
@@ -481,8 +481,8 @@ get fun `test v3 parent safety: Linked transfer bounces require exact active sta
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.01"),
-            body: parentSafetyRichBounceBody(wrongGeneration.toCell(), ton("0.01")),
+            value: grams("0.01"),
+            body: parentSafetyRichBounceBody(wrongGeneration.toCell(), grams("0.01")),
         }).bounced(),
     );
     expect(collection.getParentReturn().inFlight).toEqual(true);
@@ -517,8 +517,8 @@ get fun `test v3 parent safety: Locked return bounce requires its exact receipt`
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.05"),
-            body: parentSafetyRichBounceBody(returned.toCell(), ton("0.05")),
+            value: grams("0.05"),
+            body: parentSafetyRichBounceBody(returned.toCell(), grams("0.05")),
         }).bounced(),
     );
     expect(withoutReceipt).toHaveSuccessfulTx({ to: collection.address });
@@ -530,7 +530,7 @@ get fun `test v3 parent safety: Locked return bounce requires its exact receipt`
             oldOwnerAddress: master,
             payload: beginCell().storeBool(true).storeRef(handoff.toCell()).endCell().beginParse(),
         }.toCell(),
-        { value: ton("0.2"), bounce: false },
+        { value: grams("0.2"), bounce: false },
     );
     var mismatched = returned;
     mismatched.queryId += 1;
@@ -539,8 +539,8 @@ get fun `test v3 parent safety: Locked return bounce requires its exact receipt`
         createMessage({
             bounce: false,
             dest: collection.address,
-            value: ton("0.05"),
-            body: parentSafetyRichBounceBody(mismatched.toCell(), ton("0.05")),
+            value: grams("0.05"),
+            body: parentSafetyRichBounceBody(mismatched.toCell(), grams("0.05")),
         }).bounced(),
     );
     val confirmation = collection.sendConfirmParentHandoff(
@@ -549,7 +549,7 @@ get fun `test v3 parent safety: Locked return bounce requires its exact receipt`
         handoff.requestQueryId,
         parent.address,
         intendedAdmin.address,
-        { value: ton("0.1"), bounce: true },
+        { value: grams("0.1"), bounce: true },
     );
     expect(
         confirmation.findTransaction<TransferOwnership>({

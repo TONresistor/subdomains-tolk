@@ -24,15 +24,15 @@ const MAX_MIN_CHARS = 4 // a registry may set its minimum to 1, 2, 3 or 4
 // Zero is a valid protocol price. Mints still have to fund item deployment and execution.
 fun PriceConfig.isValid(self): bool {
     return self.minChars >= 1 && self.minChars <= MAX_MIN_CHARS && self.p1 >= self.p2 &&
-    self.p2 >= self.p3 &&
-    self.p3 >= self.p4 &&
-    self.p4 >= self.p5 &&
-    self.p5 >= self.p6 &&
-    self.p6 >= self.p7 &&
-    self.p7 >= self.p8 &&
-    self.p8 >= self.p9 &&
-    self.p9 >= self.p10 &&
-    self.p10 >= self.pRest;
+        self.p2 >= self.p3 &&
+        self.p3 >= self.p4 &&
+        self.p4 >= self.p5 &&
+        self.p5 >= self.p6 &&
+        self.p6 >= self.p7 &&
+        self.p7 >= self.p8 &&
+        self.p8 >= self.p9 &&
+        self.p9 >= self.p10 &&
+        self.p10 >= self.pRest;
 }
 
 fun PriceConfig.priceForCharCount(self, n: int): coins {
@@ -67,22 +67,4 @@ fun PriceConfig.priceForCharCount(self, n: int): coins {
         return self.p10;
     }
     return self.pRest; // 11+
-}
-
-// Default preset (4-char minimum). p1..p3 are premium tiers, unused at minChars 4 but kept monotonic.
-fun defaultPriceConfig(): PriceConfig {
-    return {
-        minChars: 4,
-        p1: ton("100"),
-        p2: ton("50"),
-        p3: ton("20"),
-        p4: ton("10"),
-        p5: ton("5"),
-        p6: ton("4"),
-        p7: ton("3"),
-        p8: ton("2"),
-        p9: ton("1"),
-        p10: ton("0.5"),
-        pRest: ton("0.1"),
-    };
 }
