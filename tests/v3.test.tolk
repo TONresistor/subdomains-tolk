@@ -690,9 +690,13 @@ get fun `test v3: withdrawal is capped by physical balance`() {
     expect(withdrawal).toHaveSuccessfulTx({ to: collection.address });
     val payout = withdrawal.findTransaction({ from: collection.address, to: owner.address })!;
     val paid = v3MessageValue(payout.loadInMsg<RemainingBitsAndRefs>().info);
-    expect(paid).toBeLessOrEqual(balanceBefore - COLLECTION_MIN_BALANCE - FWD_FEE_RESERVE);
-    expect(paid).toBeLess(accountedRevenue);
-    expect(collection.getWithdrawableRevenue()).toEqual(accountedRevenue - paid);
+    val withdrawnRevenue = accountedRevenue - collection.getWithdrawableRevenue();
+    expect(withdrawnRevenue).toEqual(balanceBefore - COLLECTION_MIN_BALANCE - FWD_FEE_RESERVE);
+    expect(paid > withdrawnRevenue).toEqual(true);
+    expect(paid).toBeLess(withdrawnRevenue + grams("0.05"));
+    expect(testing.getAccountBalance(collection.address)).toEqual(
+        COLLECTION_MIN_BALANCE + FWD_FEE_RESERVE,
+    );
 }
 
 get fun `test v3: item bounce keeps allowlist membership and clears pending mint`() {

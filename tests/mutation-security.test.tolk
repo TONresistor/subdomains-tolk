@@ -1182,9 +1182,10 @@ get fun `test mutation: collection withdrawal preserves the requested amount and
         { value: grams("0.05"), bounce: true },
     );
     val payout = partial.findTransaction({ from: collection.address, to: owner.address })!;
-    expect(messageValue(payout.loadInMsg<RemainingBitsAndRefs>().info)).toBeLessOrEqual(
-        grams("0.01"),
-    );
+    val received = messageValue(payout.loadInMsg<RemainingBitsAndRefs>().info);
+    expect(received > grams("0.01")).toEqual(true);
+    expect(received).toBeLess(grams("0.06"));
+    expect(collection.getWithdrawableRevenue()).toEqual(grams("1.99"));
 
     val master = newActor("mutation-floor-master");
     val parent = newActor("mutation-floor-parent");
@@ -1211,7 +1212,9 @@ get fun `test mutation: collection withdrawal preserves the requested amount and
         { value: grams("0.05"), bounce: true },
     );
     expect(noPayout).toHaveSuccessfulTx({ to: floor.address });
-    expect(noPayout.findTransaction({ from: floor.address, to: floorOwner.address })).toEqual(null);
+    val refund = noPayout.findTransaction<Excesses>({ from: floor.address, to: floorOwner.address })!;
+    expect(messageValue(refund.loadInMsg<Excesses>().info)).toBeLess(grams("0.05"));
+    expect(floor.getWithdrawableRevenue()).toEqual(0);
 }
 
 get fun `test mutation: collection recovery receipt controls replay behavior`() {

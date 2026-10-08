@@ -116,6 +116,16 @@ fun sendRevenuePayout(recipient: address, amount: coins) {
     payout.send(SEND_MODE_PAY_FEES_SEPARATELY);
 }
 
+fun sendAdminExcesses(recipient: address, queryId: uint64, revenue: coins = 0) {
+    val reply = createMessage({
+        bounce: BounceMode.NoBounce,
+        dest: recipient,
+        value: revenue,
+        body: Excesses { queryId },
+    });
+    reply.send(SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+}
+
 fun parseLinkedParentAction(payload: TransferForwardPayload): LinkedParentAction? {
     var p = payload;
     try {
@@ -770,6 +780,7 @@ fun onInternalMessage(in: InMessage) {
             policy.accessMode = msg.accessMode;
             storage.policy = policy.toCell();
             storage.save();
+            sendAdminExcesses(in.senderAddress, msg.queryId);
         }
 
         SetAllowlistEntry => {
@@ -783,6 +794,7 @@ fun onInternalMessage(in: InMessage) {
             }
             storage.policy = policy.toCell();
             storage.save();
+            sendAdminExcesses(in.senderAddress, msg.queryId);
         }
 
         WithdrawFees => {
@@ -797,7 +809,7 @@ fun onInternalMessage(in: InMessage) {
             policy.withdrawableRevenue -= amount;
             storage.policy = policy.toCell();
             storage.save();
-            sendRevenuePayout(storage.admin, amount);
+            sendAdminExcesses(in.senderAddress, msg.queryId, amount);
         }
 
         // ---------------- admin: transfer role ----------------
@@ -878,6 +890,7 @@ fun onInternalMessage(in: InMessage) {
             }
             storage.names = names.toCell();
             storage.save();
+            sendAdminExcesses(in.senderAddress, msg.queryId);
         }
 
         // ---------------- admin: rescue NFT ----------------
