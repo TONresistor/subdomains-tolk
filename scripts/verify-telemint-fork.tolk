@@ -244,6 +244,23 @@ fun main() {
         quote.requiredValue == quote.effectivePrice + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
     ) throw 2018;
 
+    val revenueBeforeAdminMint = locked.getWithdrawableRevenue();
+    val adminQuote = locked.getMintQuote(buyer.address, 5);
+    assert (adminQuote.allowed && adminQuote.effectivePrice == 0) throw 2020;
+    assert (adminQuote.requiredValue == ITEM_DEPLOY_COST + MINT_FEE_BUFFER) throw 2021;
+    val adminMint = locked.sendRegisterSubdomain(
+        buyer.address,
+        11,
+        beginCell().storeUint(0x626f626279, 40).endCell().beginParse(),
+        true,
+        metadata(),
+        { value: adminQuote.requiredValue, bounce: true },
+    );
+    expect(adminMint).toHaveSuccessfulTx({ from: locked.address, deploy: true });
+    expect(adminMint.findTransaction({ from: locked.address, to: parent })).toEqual(null);
+    assert (locked.getMintedCount() == 2) throw 2022;
+    assert (locked.getWithdrawableRevenue() == revenueBeforeAdminMint) throw 2023;
+
     val renewal = locked.sendFillUpParent(
         minter.address,
         10,
@@ -264,4 +281,5 @@ fun main() {
     println("Telemint Locked resolver           : GREEN");
     println("Telemint mint without heartbeat    : GREEN");
     println("Telemint explicit renewal disabled : GREEN");
+    println("Telemint admin mint without price  : GREEN");
 }

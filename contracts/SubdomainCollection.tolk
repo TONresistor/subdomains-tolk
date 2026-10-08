@@ -55,6 +55,10 @@ fun isValidAccessMode(accessMode: uint8): bool {
         accessMode == ACCESS_ADMIN_ONLY;
 }
 
+fun resolveMintPrice(config: PriceConfig, admin: address, minter: address, charCount: int): coins {
+    return minter == admin ? 0 : config.priceForCharCount(charCount);
+}
+
 fun resolveMintAccess(
     policy: CollectionPolicyState,
     admin: address,
@@ -328,7 +332,7 @@ fun processRegistration(
         throw ERROR_LABEL_RESERVED;
     }
 
-    val price = cfg.priceForCharCount(len / BYTE_SIZE);
+    val price = resolveMintPrice(cfg, storage.admin, senderAddress, len / BYTE_SIZE);
     val allowed = resolveMintAccess(policy, storage.admin, senderAddress);
     assert (allowed) throw ERROR_MINT_NOT_ALLOWED;
     val nowTime = blockchain.now();
@@ -1140,7 +1144,7 @@ get fun get_mint_quote(wallet: address, charCount: int): MintQuoteReply {
             requiredValue: 0,
         };
     }
-    val effectivePrice = config.priceForCharCount(charCount);
+    val effectivePrice = resolveMintPrice(config, storage.admin, wallet, charCount);
     val allowed = wallet.getWorkchain() == BASECHAIN &&
         resolveMintAccess(policy, storage.admin, wallet);
     return {

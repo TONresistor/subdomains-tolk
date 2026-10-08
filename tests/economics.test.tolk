@@ -299,3 +299,60 @@ get fun `test v4 fees: maximum label mints at its exact long-label quote`() {
     expect(coll.getMintedCount()).toEqual(1);
     expect(testing.getAccountBalance(coll.address)).toBeGreaterOrEqual(balanceBefore);
 }
+
+get fun `test economics: admin mints at execution cost without generating revenue`() {
+    val (coll, _parent, owner, user) = deployLockedCollection();
+    val quote = coll.getMintQuote(owner.address, 5);
+    expect(quote.allowed).toEqual(true);
+    expect(quote.effectivePrice).toEqual(0);
+    expect(quote.requiredValue).toEqual(ITEM_DEPLOY_COST + MINT_FEE_BUFFER);
+    expect(coll.getMintQuote(user.address, 5).effectivePrice).toEqual(ALICE_PRICE);
+
+    val (item, _res) = mintSubdomain(coll, owner, "alice", quote.requiredValue);
+    expect(testing.isDeployed(item.address)).toEqual(true);
+    expect(item.getNftData().ownerAddress).toEqual(owner.address);
+    expect(coll.getMintedCount()).toEqual(1);
+    expect(coll.getWithdrawableRevenue()).toEqual(0);
+}
+
+get fun `test economics: admin still needs execution funding`() {
+    val (coll, _parent, owner, _user) = deployLockedCollection();
+    val res = coll.sendRegisterSubdomain(
+        owner.address,
+        7,
+        labelSlice("alice"),
+        true,
+        testOnchainMetadata(),
+        { value: ITEM_DEPLOY_COST + MINT_FEE_BUFFER - 1, bounce: true },
+    );
+    expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
+    expect(coll.getMintedCount()).toEqual(0);
+    expect(coll.getWithdrawableRevenue()).toEqual(0);
+}
+
+get fun `test economics: admin overpayment is refunded without changing existing revenue`() {
+    val (coll, _parent, owner, user) = deployLockedCollection();
+    mintSubdomain(coll, user, "bobby", REQUIRED);
+    val (_item, res) = mintSubdomain(coll, owner, "alice", grams("20"));
+    val refund = res.findTransaction<Excesses>({ from: coll.address, to: owner.address });
+    expect(refund).toBeNotNull();
+    expect(internalMessageValue(refund!)).toEqual(grams("20") - ITEM_DEPLOY_COST - MINT_FEE_BUFFER);
+    expect(coll.getWithdrawableRevenue()).toEqual(ALICE_PRICE);
+}
+
+get fun `test economics: exemption follows the current admin`() {
+    val (coll, _parent, owner, user) = deployLockedCollection();
+    val transfer = coll.sendTransferAdmin(
+        owner.address,
+        1,
+        user.address,
+        { value: grams("0.1"), bounce: true },
+    );
+    expect(transfer).toHaveSuccessfulTx({ to: coll.address });
+    expect(coll.getMintQuote(owner.address, 5).effectivePrice).toEqual(ALICE_PRICE);
+    val quote = coll.getMintQuote(user.address, 5);
+    expect(quote.effectivePrice).toEqual(0);
+    val (item, _res) = mintSubdomain(coll, user, "alice", quote.requiredValue);
+    expect(testing.isDeployed(item.address)).toEqual(true);
+    expect(coll.getWithdrawableRevenue()).toEqual(0);
+}

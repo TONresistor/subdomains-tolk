@@ -1,0 +1,100 @@
+{
+  "rules": [
+    {
+      "explanation": "Admin exemption regression must be detected by contract tests.",
+      "level": "major",
+      "group": "admin-pricing",
+      "name": "admin-all-free",
+      "description": "all-free",
+      "matcher": {
+        "type": "query",
+        "query": "(ternary_operator condition: (binary_operator) @cond (#eq? @cond \"minter == admin\"))",
+        "capture": "cond"
+      },
+      "edit": {
+        "type": "replace",
+        "replacement": "true"
+      }
+    },
+    {
+      "explanation": "Admin exemption regression must be detected by contract tests.",
+      "level": "major",
+      "group": "admin-pricing",
+      "name": "admin-no-exemption",
+      "description": "no-exemption",
+      "matcher": {
+        "type": "query",
+        "query": "(ternary_operator condition: (binary_operator) @cond (#eq? @cond \"minter == admin\"))",
+        "capture": "cond"
+      },
+      "edit": {
+        "type": "replace",
+        "replacement": "false"
+      }
+    },
+    {
+      "explanation": "Admin exemption regression must be detected by contract tests.",
+      "level": "major",
+      "group": "admin-pricing",
+      "name": "admin-registration-free",
+      "description": "registration ignores exemption",
+      "matcher": {
+        "type": "query",
+        "query": "((function_call callee: (identifier) @fn (#eq? @fn \"resolveMintPrice\")) @call (#eq? @call \"resolveMintPrice(cfg, storage.admin, senderAddress, len / BYTE_SIZE)\"))",
+        "capture": "call"
+      },
+      "edit": {
+        "type": "replace",
+        "replacement": "0"
+      }
+    },
+    {
+      "explanation": "Admin exemption regression must be detected by contract tests.",
+      "level": "major",
+      "group": "admin-pricing",
+      "name": "admin-registration-paid",
+      "description": "registration ignores exemption",
+      "matcher": {
+        "type": "query",
+        "query": "((function_call callee: (identifier) @fn (#eq? @fn \"resolveMintPrice\")) @call (#eq? @call \"resolveMintPrice(cfg, storage.admin, senderAddress, len / BYTE_SIZE)\"))",
+        "capture": "call"
+      },
+      "edit": {
+        "type": "replace",
+        "replacement": "cfg.priceForCharCount(len / BYTE_SIZE)"
+      }
+    },
+    {
+      "explanation": "Admin exemption regression must be detected by contract tests.",
+      "level": "major",
+      "group": "admin-pricing",
+      "name": "admin-quote-free",
+      "description": "quote ignores exemption",
+      "matcher": {
+        "type": "query",
+        "query": "((function_call callee: (identifier) @fn (#eq? @fn \"resolveMintPrice\")) @call (#eq? @call \"resolveMintPrice(config, storage.admin, wallet, charCount)\"))",
+        "capture": "call"
+      },
+      "edit": {
+        "type": "replace",
+        "replacement": "0"
+      }
+    },
+    {
+      "explanation": "Admin exemption regression must be detected by contract tests.",
+      "level": "major",
+      "group": "admin-pricing",
+      "name": "admin-quote-paid",
+      "description": "quote ignores exemption",
+      "matcher": {
+        "type": "query",
+        "query": "((function_call callee: (identifier) @fn (#eq? @fn \"resolveMintPrice\")) @call (#eq? @call \"resolveMintPrice(config, storage.admin, wallet, charCount)\"))",
+        "capture": "call"
+      },
+      "edit": {
+        "type": "replace",
+        "replacement": "config.priceForCharCount(charCount)"
+      }
+    }
+  ]
+}
