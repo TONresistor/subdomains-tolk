@@ -10,7 +10,7 @@ import "../gen/SubdomainItem.code"
 
 contract SubdomainCollection {
     author: "tolk-subdomains"
-    version: "5.0.0"
+    version: "5.1.0"
     description: "Per-domain DNS registry with claimable Linked ownership, access policy and immutable pricing."
     incomingMessages: AllowedCollectionMessage
     storage: CollectionStorage
