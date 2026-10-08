@@ -1,228 +1,184 @@
-# TON Subdomains v3.0.0 Specification
+# TON Subdomains v5.0.0
 
-## 1. Status
+## Scope
 
-This document defines the three non-upgradeable v3 contracts. v3 is not deployed. A release requires
-new Factory, Collection and Item addresses and verified code.
+The protocol deploys non-upgradeable subdomain registries from Factory
+`EQADqpHyfQRvWQGxPqJt6Jyu_c2oqxFZgvfdfxb4UZkCE8R9`.
 
-Previous mainnet deployments are private tests and are not compatibility targets. The v3 release
-deploys new addresses without an on-chain migration path.
+It implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-81 DNS. Contracts accept any compatible parent NFT. Project clients support `.ton` domains and wallet-owned `.t.me` Telegram Username NFTs that are not in an active auction.
 
-The protocol implements TEP-62 NFTs, TEP-64 metadata, TEP-66 royalties and TEP-81 DNS.
+## Architecture
 
-## 2. Architecture
+Factory embeds Collection code; Collection embeds Item code. Addresses are derived from StateInit.
+Locked Collections are keyed by parent; Linked Collections by parent and original creator.
 
-```text
-SubdomainFactory
-  -> SubdomainCollection per parent .ton
-       -> SubdomainItem per sha256(raw_label)
-```
+Message layouts: [messages.tolk](contracts/messages.tolk). Storage: [storage.tolk](contracts/storage.tolk).
 
-- Factory embeds Collection code.
-- Collection embeds Item code.
-- StateInit determines every address.
-- No contract has an upgrade authority.
-- Factory has no admin, protocol fee or withdrawal path.
+## Collection modes
 
-## 3. Custody modes
+| | Locked | Linked |
+|---|---|---|
+| Parent custody | Held permanently by Collection | Kept in its owner's wallet |
+| Resolver | Collection pins itself as `dns_next_resolver` | Parent owner sets `dns_next_resolver` |
+| Admin changes | Current admin may transfer the role | Proven parent owner must claim |
+| Revenue | Current admin may withdraw | Proven parent owner claims and withdraws |
+| Conversion | Final | One-way conversion to Locked |
 
 ### Locked
 
-The parent NFT is transferred through Factory into Collection custody. Collection permanently owns
-the parent, pins itself as `dns_next_resolver`, renews the parent and forbids parent rescue.
+The parent is transferred through Factory to Collection and can never be rescued. Collection may proxy parent DNS edits, except changes to `dns_next_resolver`.
+
+`autoRenewParent` is immutable. When enabled, a due mint sends `0.01 TON` to the parent at most once per 24 hours. Project clients enable it for `.ton` and disable it for non-expiring `.t.me` parents.
+There is no autonomous keeper in the contracts: anyone may also fund `FillUpParent`.
 
 ### Linked
 
-The parent remains in its owner's wallet. The owner sets the parent `dns_next_resolver` to the
-Collection. Linked ownership is synchronized through an authenticated parent round trip:
+A Linked Collection address is bound to the parent and its original creator. A later parent owner
+can take control without permission from the previous admin:
 
-1. Current parent owner transfers the parent to Collection with a positive forward amount and action.
-   Official clients use at least `MIN_PARENT_RETURN_VALUE` (`0.01 TON`).
-2. The canonical parent sends `OwnershipAssigned` with the previous owner and v3 action.
-3. Collection verifies the exact parent sender and action.
-4. Collection updates state, persists a pending return and transfers the parent to the fixed recipient.
-5. Authenticated `Excesses` from the parent clears the pending return and forwards remaining value.
+1. Transfer the parent NFT to Collection with a Linked action. Project clients forward at least
+   `0.01 TON`.
+2. Collection accepts proof only from the exact parent address.
+3. Collection applies the action and returns the parent when required.
 
-The original `linkedAdmin` remains an immutable StateInit witness. `admin` is the last controller
-authenticated by a parent proof, not an automatic mirror of an unrelated parent sale. Bundle transfer
-is the canonical cooperative handoff; after a normal sale the buyer claims unilaterally.
+| Action | Value | Result |
+|---|---:|---|
+| `CLAIM` | `1` | Parent owner becomes admin, receives available revenue, and gets the parent back |
+| `CONVERT_LOCKED` | `3` | Parent owner becomes admin and Collection keeps the parent permanently |
 
-`LinkedParentAction (0x4c4e4b33)` actions:
+Missing, malformed or unknown actions only return the parent. Direct admin transfer and withdrawal are disabled while Linked. A zero forward amount cannot produce the ownership callback and is not recoverable by Collection.
 
-| Value | Action | Result |
+If an authenticated return lacks funds, `RetryParentReturn` lets any caller fund it. The recipient
+cannot change, and only one return can be in flight.
+
+## Configuration
+
+### Access
+
+| Value | Mode | Who may mint |
 |---:|---|---|
-| `0` | Safe return | No state change, parent returned to authenticated previous owner |
-| `1` | Claim | Previous parent owner becomes admin, parent returned |
-| `2` | Transfer bundle | Target becomes admin and receives parent |
-| `3` | Convert Locked | Previous parent owner becomes admin, Collection retains parent permanently |
-| `4` | Claim and withdraw | Claim plus bounded revenue withdrawal, then parent return |
+| `0` | Public | Anyone |
+| `1` | Allowlist | Admin and allowlisted wallets |
+| `2` | Admin only | Admin |
 
-Missing, malformed or unknown actions never convert custody. They trigger safe return. Direct
-`TransferAdmin` and `WithdrawFees` are disabled in Linked mode. Linked revenue requires a fresh parent
-proof through action `4`.
+The admin can change access mode, allowlist entries and reserved labels. Reserved labels remain mintable by the admin. Access rules never change price.
 
-`RetryParentReturn` is permissionless, caller-funded and cannot change the stored recipient. A null
-previous owner is quarantined and exposed by getter instead of guessing a recipient.
+### Labels and pricing
 
-`RescueNft` never accepts the parent in either mode. A zero forward amount emits no ownership proof
-and is unrecoverable on-chain. A positive but underfunded notification can persist a receipt for
-caller-funded retry. The initial callback deliberately does not reject low value after custody has
-already moved; clients enforce `MIN_PARENT_RETURN_VALUE`.
+- Labels contain 1 to 126 ASCII bytes: `a-z`, `0-9`, and interior `-`.
+- `minChars` may be 1 to 4.
+- Immutable prices cover lengths `1` through `10`, plus one price for `11+`.
+- Prices must not increase as labels get longer. Zero is valid.
+- Item index and address use `sha256(raw_label)`.
 
-## 4. Access policy
+`get_mint_quote(wallet, charCount)` returns whether the wallet may mint, the price, and the required attached value.
 
-Every Collection has one mode:
+### Metadata
 
-| Value | Mode | Allowed minters |
-|---:|---|---|
-| `0` | Public | Any basechain address |
-| `1` | Allowlist | Admin plus allowlisted wallets |
-| `2` | Admin only | Admin only |
+Collection and Item metadata is immutable TEP-64 on-chain content with tag `0`, limited to 32 cells
+and 16,384 bits per content tree. Clients choose the fields and URI schemes; contracts validate
+the container structure and size.
 
-The allowlist is a simple address set. It never changes pricing.
+## Minting and revenue
 
-## 5. Pricing and quotes
+1. Collection validates the sender, label, metadata, access, price and attached value.
+2. It reserves the label and deploys the deterministic Item.
+3. The exact Item confirms initialization with `ItemReady`.
+4. Collection marks the label minted and credits only its price as revenue.
 
-`PriceConfig` contains `minChars`, prices for lengths `1..10`, and one price for `11+`. It is chosen
-at Collection creation and immutable afterwards. Prices must be non-increasing by label length. Zero
-is valid, including a fully free grid.
+An Item starts with immutable metadata and editable TEP-81 DNS records. `setWalletToMinter` may add the minter's wallet record during creation. The Item owner can transfer the NFT, replace all DNS records, or change one record.
 
-`get_mint_quote` reports live authorization, immutable price and required execution value.
+A failed Item deployment releases the label and refunds recoverable value. If confirmation is lost,
+any caller may fund `ConfirmMint`; Collection verifies the exact Item and its Collection before
+finalizing.
 
-Required mint value is:
+Withdrawals cannot exceed accounted revenue or the balance available above operational reserves.
 
-```text
-effectivePrice + ITEM_DEPLOY_COST + MINT_FEE_BUFFER
-```
+Top-ups and execution funding do not become revenue. Royalties are zero.
 
-A free mint still requires `0.10 TON` with current constants. This funds execution and Item creation,
-not protocol revenue.
+Factory and Collection recovery messages are caller-funded and authenticate the sender and pending operation.
 
-## 6. Mint lifecycle and accounting
+## Get methods
 
-1. Collection validates label, policy, quote, records and funding.
-2. Collection reserves `PendingMint`.
-3. Collection deploys the deterministic Item with a rich bounce.
-4. Item persists its state and sends authenticated `ItemReady`.
-5. Collection finalizes the label, increments `mintedCount` and credits only the effective price to
-   `withdrawableRevenue`.
+Generated typed wrappers are committed in [`wrappers/`](wrappers/).
 
-On deployment bounce, Collection removes the pending label and refunds recoverable value. If
-`ItemReady` is lost, any caller can fund `ConfirmMint`; Collection asks
-the exact Item for `ReportStaticData` and finalizes only after authenticating its address and
-collection field.
+- **Factory:** `get_collection_address`, `get_linked_collection_address`.
+- **Collection standards:** `get_collection_data`, `get_nft_address_by_index`,
+  `get_nft_content`, `royalty_params`, `dnsresolve`.
+- **Collection state:** `get_parent_domain`, `get_admin`, `get_linked_admin`, `get_is_linked`,
+  `is_locked`, `get_min_chars`, `get_price`, `get_access_mode`, `get_is_allowlisted`,
+  `get_mint_quote`, `get_minted_count`, `get_is_mint_pending`, `get_withdrawable_revenue`,
+  `get_auto_renew_parent`, `get_last_parent_fill_up`, `get_parent_return`.
+- **Item:** `get_nft_data`, `get_editor`, `get_domain`, `get_minted_at`, `get_last_touch`,
+  `get_valid_until`, `dnsresolve`.
 
-Withdrawals are limited by both `withdrawableRevenue` and the physical balance above operational
-reserves. Top-ups, parent return surplus and execution funding are not automatically revenue.
+Exact return structs are defined in [`contracts/storage.tolk`](contracts/storage.tolk). Canonical
+exit codes are defined in [`contracts/errors.tolk`](contracts/errors.tolk).
 
-## 7. Storage
+## ABI opcodes
 
-```text
-FactoryStorage {
-  pending, rejectedReturns
-}
+### TON standards
 
-PendingDeployment {
-  deploymentId, parentDomain, admin, queryId,
-  handoffValue, isLinked, phase, meta
-}
-
-FactoryPendingReturn {
-  deploymentId, parentDomain, admin, queryId
-}
-
-CollectionSkeleton {
-  master, parentDomain, isLinked, linkedAdmin
-}
-
-CollectionStorage {
-  master, parentDomain, admin, origin, isLinked,
-  lastParentFillUp, meta, names, policy
-}
-
-CollectionNames {
-  reserved, minted, mintedCount
-}
-
-CollectionPolicyState {
-  accessMode, withdrawableRevenue, allowlist,
-  pendingMints, parentGeneration, pendingParentReturn?
-}
-```
-
-Rejected returns never retain caller-supplied metadata.
-
-Item storage remains TEP-62 compatible and contains index, Collection, owner, records, raw label and
-timestamps.
-
-## 8. Contract interfaces
-
-Factory messages:
-
-| Message | Purpose |
-|---|---|
-| `OwnershipAssigned` | Start Locked creation from authenticated parent custody |
-| `CreateLinkedCollection` | Deploy a creator-bound Linked Collection |
-| `CollectionReady`, `ParentHandoffComplete` | Advance authenticated deployment phases |
-| `RetryCollectionDeployment` | Replay the stored phase with caller funding |
-
-Factory getters are `get_collection_address` and `get_linked_collection_address`.
-
-Collection messages:
-
-| Opcode | Message | Authority |
+| Opcode | Message | Use |
 |---|---|---|
-| `0x49278399` | `RegisterSubdomain` | Policy-authorized minter |
-| `0x49524459` | `ItemReady` | Exact derived Item |
-| `0x41434353` | `SetAccessMode` | Admin |
-| `0x414c4c57` | `SetAllowlistEntry` | Admin |
-| `0x7969d64e` | `SetContent` | Admin, pricing preserved |
-| `0xccef6e14` | `SetLabelReserved` | Admin |
-| `0x1e4b7535` | `WithdrawFees` | Locked admin only |
-| `0x2b8af82e` | `TransferAdmin` | Locked admin only |
-| `0x97be5c56` | `ProxyEditParentRecord` | Locked admin only |
-| `0x5cfedae5`, `0xe0329a90` | `FillUpParent`, `EnforceResolver` | Anyone, caller-funded, Locked only |
-| `0x2096dda6` | `RescueNft` | Admin, parent always forbidden |
-| `0x693d3950` | `GetRoyaltyParams` | Anyone |
-| `0x48445052` | `ConfirmParentHandoff` | Factory |
-| `0x52505254` | `RetryParentReturn` | Anyone, caller-funded |
-| `0x434d494e` | `ConfirmMint` | Anyone, caller-funded |
+| `0x5fcc3d14` | `TransferOwnership` | TEP-62 NFT transfer |
+| `0x05138d91` | `OwnershipAssigned` | TEP-62 transfer notification and parent proof |
+| `0xd53276db` | `Excesses` | TEP-62 acknowledgement or refund |
+| `0x2fcb26a2` | `GetStaticData` | Request Item identity |
+| `0x8b771735` | `ReportStaticData` | Return Item identity |
+| `0x693d3950` | `GetRoyaltyParams` | Request TEP-66 royalty data |
+| `0xa8cb00ad` | `ReportRoyaltyParams` | Return zero royalty data |
+| `0x4eb1f0f9` | `ChangeDnsRecord` | Change one TEP-81 DNS record |
+| `0x1a0b9d51` | `EditContent` | Replace all TEP-81 DNS records |
 
-Collection getters cover TEP-62 and TEP-66 data, DNS resolution, addresses, custody mode, immutable
-pricing, access policy, mint state, revenue and pending parent return.
+`0xba93` is the `dns_next_resolver` record tag, not a message opcode.
 
-Item messages are standard TEP-62 `TransferOwnership` and `GetStaticData`, plus TEP-81
-`ChangeDnsRecord` and `EditContent`. Item getters expose NFT data, editor, raw label, timestamps and
-`dnsresolve`. TEP-62 ownership, static-data and excess layouts are unchanged.
+### Protocol
 
-## 9. Economic constants
+| Opcode | Message or payload | Use |
+|---|---|---|
+| `0x6c0c4b17` | `LockCollection` | Initialize Collection from Factory |
+| `0x52445931` | `CollectionReady` | Confirm Collection deployment to Factory |
+| `0x48444f4b` | `ParentHandoffComplete` | Confirm Locked parent custody to Factory |
+| `0x48445052` | `ConfirmParentHandoff` | Probe a pending Locked handoff |
+| `0x52545259` | `RetryCollectionDeployment` | Retry a Factory deployment phase |
+| `0x4c494e4b` | `CreateLinkedCollection` | Create a Linked Collection |
+| `0x48414e44` | `FactoryHandoff` | Authenticate the Locked parent handoff payload |
+| `0x2428aaa6` | `SubdomainInit` | Initialize an Item from Collection |
+| `0x49524459` | `ItemReady` | Confirm Item deployment to Collection |
+| `0x49278399` | `RegisterSubdomain` | Mint a subdomain Item |
+| `0x1e4b7535` | `WithdrawFees` | Withdraw Locked Collection revenue |
+| `0x2b8af82e` | `TransferAdmin` | Transfer Locked Collection admin |
+| `0x9f3acb9c` | `AdminAssigned` | Notify the new admin |
+| `0x97be5c56` | `ProxyEditParentRecord` | Edit a Locked parent DNS record |
+| `0x5cfedae5` | `FillUpParent` | Fund parent renewal |
+| `0xe0329a90` | `EnforceResolver` | Restore the Locked parent resolver |
+| `0xccef6e14` | `SetLabelReserved` | Reserve or release a label hash |
+| `0x2096dda6` | `RescueNft` | Rescue an unrelated NFT |
+| `0x41434353` | `SetAccessMode` | Change mint access mode |
+| `0x414c4c57` | `SetAllowlistEntry` | Add or remove an allowlist entry |
+| `0x52505254` | `RetryParentReturn` | Retry a Linked parent return |
+| `0x434d494e` | `ConfirmMint` | Recover a pending mint confirmation |
+| `0x4c4e4b33` | `LinkedParentAction` | Carry `CLAIM` or `CONVERT_LOCKED` in a parent transfer |
 
-| Constant | Value |
+## Transaction values
+
+These values fund execution; they are not protocol fees. Supported excess amounts are returned when
+the message flow permits it. Other messages still need enough value for normal execution.
+
+| Operation | Required value |
 |---|---:|
-| `MIN_CREATE_VALUE` | `0.50 TON` |
-| `COLLECTION_DEPLOY_VALUE` | `0.25 TON` |
-| `ITEM_DEPLOY_COST` | `0.07 TON` |
-| `ITEM_READY_VALUE` | `0.01 TON` |
-| `MINT_FEE_BUFFER` | `0.03 TON` |
-| `COLLECTION_MIN_BALANCE` | `0.05 TON` |
-| `FWD_FEE_RESERVE` | `0.02 TON` |
-| `MIN_PARENT_RETURN_VALUE` | `0.01 TON` |
-| `MIN_CONFIRM_MINT_VALUE` | `0.03 TON` |
+| Create Linked | `0.135 TON` |
+| Create Locked | Parent transfer forwards at least `0.20 TON` |
+| Mint | Price plus `0.07 TON` |
+| Mint with due parent renewal | Price plus `0.08 TON` |
+| Linked parent action | Project client forwards at least `0.01 TON` |
+| Retry Linked parent return | `0.01 TON` |
+| Fill parent | `0.01 TON` |
+| Enforce resolver | `0.02 TON` |
+| Confirm pending mint | `0.005 TON` |
+| Replay Factory Collection deployment phase | `0.135 TON` |
+| Retry Factory handoff or return phase | `0.10 TON` |
 
-## 10. Release invariants
-
-1. Only the canonical parent can prove Linked ownership.
-2. A malformed parent payload cannot cause Locked conversion.
-3. A pending parent return cannot change recipient during retry.
-4. Linked revenue cannot withdraw without a fresh parent proof.
-5. A label is in at most one state: pending or minted.
-6. Failed Item deployment restores the label and refunds recoverable value.
-7. Only finalized mint price becomes withdrawable revenue.
-8. Factory and deterministic address witnesses remain immutable.
-9. A cached Linked admin can never rescue the parent without a fresh ownership proof.
-10. Linked transfer builders enforce `MIN_PARENT_RETURN_VALUE` as the parent forward amount.
-11. Rejected Factory custody stores only a bounded return receipt, never untrusted metadata.
-12. Collection counts are indexed from authenticated deployment events, not duplicated in Factory
-    storage.
-13. Mainnet release requires reproducible BOCs, TON Verifier publication, full tests, coverage and
-    mutation gates, pinned deployment values and atomic indexer/frontend cutover.
+The extra `0.01 TON` renewal applies only to Locked Collections with `autoRenewParent` enabled and a
+heartbeat due.

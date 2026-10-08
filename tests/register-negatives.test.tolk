@@ -7,13 +7,13 @@ import "test-utils"
 
 get fun `test register: insufficient value is rejected`() {
     val (coll, _parent, _owner, user) = deployLockedCollection();
-    // price("alice"=5) = 5 TON, + ITEM_DEPLOY_COST 0.07 + MINT_FEE_BUFFER 0.03 = 5.1 required ; send 2
+    // The configured price plus deployment and execution funding exceeds the attached value.
     val res = coll.sendRegisterSubdomain(
         user.address,
         1,
         labelSlice("alice"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("2"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
@@ -25,8 +25,8 @@ get fun `test register: too-short label is rejected`() {
         user.address,
         1,
         labelSlice("bob"),
-        true,
-        null, // 3 chars < 4
+        true, // 3 chars < 4
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_SHORT });
@@ -38,8 +38,8 @@ get fun `test register: invalid characters are rejected`() {
         user.address,
         1,
         labelSlice("hello!"),
-        true,
-        null, // '!' invalid
+        true, // '!' invalid
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
@@ -67,7 +67,7 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         1,
         labelSlice("admin"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(userTry).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_RESERVED });
@@ -77,7 +77,7 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         2,
         labelSlice("admin"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(adminTry).toHaveSuccessfulTx({ to: coll.address });
@@ -91,7 +91,7 @@ get fun `test register: reserved label blocks non-admin but allows admin`() {
         5,
         labelSlice("release"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(releasedMint).toHaveSuccessfulTx({ to: coll.address });

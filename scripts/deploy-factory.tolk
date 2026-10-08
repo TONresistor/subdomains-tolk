@@ -1,6 +1,5 @@
 import "@stdlib/strings"
 // Prepare locally first, then broadcast only with every printed input pinned through env vars.
-// See README.md "Deployment (mainnet)" for the exact two-step command.
 import "@acton/build"
 import "@acton/env"
 import "@acton/io"

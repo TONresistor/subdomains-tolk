@@ -2,6 +2,7 @@ import "@acton/emulation/network"
 import "@acton/emulation/testing"
 import "@acton/testing/expect"
 import "@contracts/errors"
+import "@contracts/storage"
 import "@wrappers/SubdomainCollection.gen"
 import "test-utils"
 
@@ -11,12 +12,20 @@ get fun `test renew: explicit fill_up_parent renews the parent lease (caller-fun
     expect(coll.getLastParentFillUp()).toEqual(1700000000); // set at lock time
 
     // a below-minimum fill reverts: the renew must be funded by the caller
-    val tooLow = coll.sendFillUpParent(owner.address, 1, { value: ton("0.01"), bounce: true });
+    val tooLow = coll.sendFillUpParent(
+        owner.address,
+        1,
+        { value: MIN_PARENT_FILL - 1, bounce: true },
+    );
     expect(tooLow).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
 
     // a funded fill renews anytime (no throttle): an empty-body op-0 heartbeat reaches the parent
     testing.setNow(1700000000 + 100);
-    val res = coll.sendFillUpParent(owner.address, 2, { value: ton("1"), bounce: true });
+    val res = coll.sendFillUpParent(
+        owner.address,
+        2,
+        { value: MIN_PARENT_FILL, bounce: true },
+    );
     expect(res).toHaveSuccessfulTx({ to: coll.address });
     expect(res.findTransaction({ from: coll.address, to: parent.address })).toBeNotNull();
     expect(coll.getLastParentFillUp()).toEqual(1700000000 + 100);

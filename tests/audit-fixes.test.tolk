@@ -137,7 +137,7 @@ get fun `test audit2: double-mint of the same label is rejected`() {
         2,
         labelSlice("alice"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("20"), bounce: true },
     );
     expect(dup).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TAKEN });
@@ -156,7 +156,7 @@ get fun `test audit3: a label with refs is rejected`() {
         1,
         labelWithRef,
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("20"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });

@@ -113,7 +113,7 @@ get fun `test v3: zero protocol pricing mints with execution funding only`() {
         2,
         labelSlice("alice"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ITEM_DEPLOY_COST + MINT_FEE_BUFFER, bounce: true },
     );
     expect(minted).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -142,7 +142,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         2,
         labelSlice("denied"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("10"), bounce: true },
     );
     expect(denied).toHaveFailedTx({ to: collection.address, exitCode: ERROR_MINT_NOT_ALLOWED });
@@ -169,7 +169,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         4,
         labelSlice("alice"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("5.1"), bounce: true },
     );
     expect(first).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -180,7 +180,7 @@ get fun `test v3: allowlist controls access without changing prices`() {
         5,
         labelSlice("bobby"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("5.1"), bounce: true },
     );
     expect(second).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -218,7 +218,7 @@ get fun `test v3: admin-only policy blocks users but not the admin`() {
         2,
         labelSlice("owner"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("5.1"), bounce: true },
     );
     expect(adminMint).toHaveSuccessfulTx({ from: collection.address, deploy: true });
@@ -235,7 +235,7 @@ get fun `test v3: lost ItemReady is finalized through authenticated static data`
             queryId: 88,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
-            initialRecords: null,
+            content: testOnchainMetadata(),
         },
     });
     val registerStep = testing.processSingleTraceStep(user.address, request);
@@ -324,51 +324,14 @@ get fun `test v3: a new parent proof clears a stale return receipt across owners
     expect(collection.getParentReturn().pending).toEqual(false);
 }
 
-get fun `test v3: invalid Linked actions safe-return without changing authority`() {
+get fun `test v3: unknown Linked action safe-returns without changing authority`() {
     val (collection, parent, owner, _user) = deployLinkedCollection();
     val claimant = newActor("v3-invalid-action-claimant");
-    val target = newActor("v3-invalid-action-target");
-
-    val invalidBundle = collection.sendAny(
-        parent.address,
-        OwnershipAssigned {
-            queryId: 760,
-            oldOwnerAddress: claimant.address,
-            payload: linkedActionPayload(LINKED_ACTION_TRANSFER_BUNDLE),
-        }.toCell(),
-        { value: MIN_PARENT_RETURN_VALUE, bounce: false },
-    );
-    expect(invalidBundle).toHaveSuccessfulTx({ to: collection.address });
-    expect(collection.getAdmin()).toEqual(owner.address);
-    expect(collection.getParentReturn().recipient).toEqual(claimant.address);
-    collection.sendAny(
-        parent.address,
-        Excesses { queryId: collection.getParentReturn().returnQueryId }.toCell(),
-        { value: ton("0.05"), bounce: false },
-    );
-
-    val invalidClaim = collection.sendAny(
-        parent.address,
-        OwnershipAssigned {
-            queryId: 761,
-            oldOwnerAddress: claimant.address,
-            payload: linkedActionPayload(LINKED_ACTION_CLAIM, target.address),
-        }.toCell(),
-        { value: MIN_PARENT_RETURN_VALUE, bounce: false },
-    );
-    expect(invalidClaim).toHaveSuccessfulTx({ to: collection.address });
-    expect(collection.getAdmin()).toEqual(owner.address);
-    expect(collection.getParentReturn().recipient).toEqual(claimant.address);
-    collection.sendAny(
-        parent.address,
-        Excesses { queryId: collection.getParentReturn().returnQueryId }.toCell(),
-        { value: ton("0.05"), bounce: false },
-    );
 
     val unknown = collection.sendAny(
         parent.address,
         OwnershipAssigned {
-            queryId: 762,
+            queryId: 760,
             oldOwnerAddress: claimant.address,
             payload: linkedActionPayload(255),
         }.toCell(),
@@ -379,9 +342,9 @@ get fun `test v3: invalid Linked actions safe-return without changing authority`
     expect(collection.getParentReturn().recipient).toEqual(claimant.address);
 }
 
-get fun `test v3: parent return retry is permissionless but caller-funded`() {
+get fun `test v3: underfunded parent return stays permissionlessly retryable`() {
     val (collection, parent, owner, user) = deployLinkedCollection();
-    collection.sendAny(
+    val underfunded = collection.sendAny(
         parent.address,
         OwnershipAssigned {
             queryId: 800,
@@ -390,7 +353,15 @@ get fun `test v3: parent return retry is permissionless but caller-funded`() {
         }.toCell(),
         { value: ton("0.001"), bounce: false },
     );
-    expect(collection.getParentReturn().pending).toEqual(true);
+    val pending = collection.getParentReturn();
+    expect(pending.pending).toEqual(true);
+    expect(pending.inFlight).toEqual(false);
+    expect(
+        underfunded.findTransaction<TransferOwnership>({
+            from: collection.address,
+            to: parent.address,
+        }),
+    ).toEqual(null);
 
     val low = collection.sendRetryParentReturn(
         user.address,
@@ -407,9 +378,19 @@ get fun `test v3: parent return retry is permissionless but caller-funded`() {
     expect(
         retry.findTransaction<TransferOwnership>({ from: collection.address, to: parent.address }),
     ).toBeNotNull();
+    expect(collection.getParentReturn().inFlight).toEqual(true);
+    val duplicate = collection.sendRetryParentReturn(
+        user.address,
+        803,
+        { value: MIN_PARENT_RETURN_VALUE, bounce: true },
+    );
+    expect(duplicate).toHaveFailedTx({
+        to: collection.address,
+        exitCode: ERROR_PARENT_TRANSFER_IN_FLIGHT,
+    });
 }
 
-get fun `test v3: Linked revenue withdrawal requires a fresh parent proof`() {
+get fun `test v3: Linked claim requires parent proof and withdraws revenue`() {
     val (collection, parent, seller, user) = deployLinkedCollection();
     mintSubdomain(collection, user, "alice", ton("6"));
     expect(collection.getWithdrawableRevenue()).toEqual(ton("5"));
@@ -426,36 +407,19 @@ get fun `test v3: Linked revenue withdrawal requires a fresh parent proof`() {
     });
 
     val claimant = newActor("v3-revenue-claimant");
-    val claimOnly = collection.sendAny(
+    val claim = collection.sendAny(
         parent.address,
         OwnershipAssigned {
-            queryId: 9001,
+            queryId: 901,
             oldOwnerAddress: claimant.address,
             payload: linkedActionPayload(LINKED_ACTION_CLAIM),
         }.toCell(),
         { value: MIN_PARENT_RETURN_VALUE, bounce: false },
     );
-    expect(claimOnly).toHaveSuccessfulTx({ to: collection.address });
-    expect(collection.getWithdrawableRevenue()).toEqual(ton("5"));
-    collection.sendAny(
-        parent.address,
-        Excesses { queryId: collection.getParentReturn().returnQueryId }.toCell(),
-        { value: ton("0.05"), bounce: false },
-    );
-
-    val buyer = newActor("v3-revenue-buyer");
-    val proven = collection.sendAny(
-        parent.address,
-        OwnershipAssigned {
-            queryId: 901,
-            oldOwnerAddress: buyer.address,
-            payload: linkedActionPayload(LINKED_ACTION_CLAIM_WITHDRAW, null, ton("1")),
-        }.toCell(),
-        { value: MIN_PARENT_RETURN_VALUE, bounce: false },
-    );
-    expect(proven).toHaveSuccessfulTx({ from: collection.address, to: buyer.address });
-    expect(collection.getAdmin()).toEqual(buyer.address);
-    expect(collection.getWithdrawableRevenue()).toEqual(ton("4"));
+    expect(claim).toHaveSuccessfulTx({ from: collection.address, to: claimant.address });
+    expect(collection.getAdmin()).toEqual(claimant.address);
+    expect(collection.getWithdrawableRevenue()).toEqual(0);
+    expect(collection.getParentReturn().recipient).toEqual(claimant.address);
 }
 
 get fun `test v3: item readiness authenticates sender and pending receipt`() {
@@ -480,7 +444,7 @@ get fun `test v3: item readiness authenticates sender and pending receipt`() {
             queryId: 10,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
-            initialRecords: null,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, request);
@@ -551,7 +515,7 @@ get fun `test v3: pending label cannot be bypassed`() {
             queryId: 3,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
-            initialRecords: null,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, pendingRequest);
@@ -560,7 +524,7 @@ get fun `test v3: pending label cannot be bypassed`() {
         4,
         labelSlice("alice"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("6"), bounce: true },
     );
     expect(duplicate).toHaveFailedTx({ to: collection.address, exitCode: ERROR_LABEL_TAKEN });
@@ -578,7 +542,7 @@ get fun `test v3: static-data recovery authenticates sender and collection`() {
             queryId: 10,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
-            initialRecords: null,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, request);
@@ -639,7 +603,7 @@ get fun `test v3: ConfirmMint requires pending state and caller funding`() {
             queryId: 2,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
-            initialRecords: null,
+            content: testOnchainMetadata(),
         },
     });
     testing.processSingleTraceStep(user.address, request);
@@ -698,41 +662,6 @@ get fun `test v3: parent recovery rejects invalid state and protects pending cus
         { value: ton("0.05"), bounce: false },
     );
     expect(acknowledged).toHaveSuccessfulTx({ to: linked.address });
-    val nullOwner = linked.sendAny(
-        parent.address,
-        OwnershipAssigned {
-            queryId: 5,
-            oldOwnerAddress: null,
-            payload: linkedActionPayload(LINKED_ACTION_CLAIM),
-        }.toCell(),
-        { value: MIN_PARENT_RETURN_VALUE, bounce: false },
-    );
-    expect(nullOwner).toHaveSuccessfulTx({ to: linked.address });
-    expect(linked.getAdmin()).toEqual(owner.address);
-    expect(linked.getIsLinked()).toEqual(true);
-    expect(linked.getParentReturn().pending).toEqual(true);
-    expect(linked.getParentReturn().recipient).toEqual(null);
-    val quarantinedRetry = linked.sendRetryParentReturn(
-        user.address,
-        6,
-        { value: MIN_PARENT_RETURN_VALUE, bounce: true },
-    );
-    expect(quarantinedRetry).toHaveFailedTx({
-        to: linked.address,
-        exitCode: ERROR_NO_PARENT_RETURN,
-    });
-    val quarantinedQueryId = linked.getParentReturn().returnQueryId;
-    val quarantinedAck = testing.processSingleTraceStep(
-        parent.address,
-        createMessage({
-            bounce: false,
-            dest: linked.address,
-            value: ton("0.05"),
-            body: Excesses { queryId: quarantinedQueryId },
-        }),
-    );
-    expect(quarantinedAck.outMessages.size()).toEqual(0);
-    expect(linked.getParentReturn().pending).toEqual(false);
 }
 
 get fun `test v3: withdrawal is capped by physical balance`() {
@@ -789,7 +718,7 @@ get fun `test v3: item bounce keeps allowlist membership and clears pending mint
             queryId: 3,
             label: labelSlice("alice").toCell(),
             setWalletToMinter: true,
-            initialRecords: null,
+            content: testOnchainMetadata(),
         },
     });
     val mintStep = testing.processSingleTraceStep(user.address, request);

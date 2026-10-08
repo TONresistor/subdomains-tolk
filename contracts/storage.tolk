@@ -5,31 +5,32 @@ import "prices"
 
 // ---- fee/economy constants ----
 const MIN_TONS_FOR_STORAGE = ton("0.05")
-const ITEM_DEPLOY_COST = ton("0.07")
-const ITEM_READY_VALUE = ton("0.01")
-const MINT_FEE_BUFFER = ton("0.03")
+const ITEM_DEPLOY_COST = ton("0.06")
+const ITEM_READY_VALUE = ton("0.002")
+const MINT_FEE_BUFFER = ton("0.01")
 const COLLECTION_MIN_BALANCE = ton("0.05")
-const COLLECTION_DEPLOY_VALUE = ton("0.25")
-const FACTORY_READY_VALUE = ton("0.01")
-const FACTORY_GAS_MARGIN = ton("0.01")
-const RESOLVER_PIN_FUND = ton("0.1")
-const MIN_CREATE_VALUE = ton("0.5")
-const MIN_PARENT_FILL = ton("0.05") // min incoming value for a caller-funded parent renew
+const COLLECTION_DEPLOY_VALUE = ton("0.13")
+const FACTORY_READY_VALUE = ton("0.002")
+const FACTORY_GAS_MARGIN = ton("0.005")
+const RESOLVER_PIN_VALUE = ton("0.01")
+const RESOLVER_PIN_FUND = ton("0.02")
+const MIN_CREATE_VALUE = ton("0.2")
+const MIN_PARENT_FILL = ton("0.01") // min incoming value for a caller-funded parent renew
 const FWD_FEE_RESERVE = ton("0.02")
 const PARENT_HEARTBEAT_INTERVAL = 86400 // 1 day
 const PARENT_HEARTBEAT_AMOUNT = ton("0.01")
 const MIN_PARENT_RETURN_VALUE = ton("0.01")
-const MIN_CONFIRM_MINT_VALUE = ton("0.03")
-// ---- v3 access/pricing constants ----
+const MIN_CONFIRM_MINT_VALUE = ton("0.005")
+const HANDOFF_RETRY_VALUE = ton("0.1")
+const HANDOFF_CONFIRM_VALUE = ton("0.02")
+const MIN_REJECTED_RETURN_VALUE = ton("0.05")
+// ---- access/pricing constants ----
 const ACCESS_PUBLIC: uint8 = 0
 const ACCESS_ALLOWLIST: uint8 = 1
 const ACCESS_ADMIN_ONLY: uint8 = 2
 
-const LINKED_ACTION_SAFE_RETURN: uint8 = 0
 const LINKED_ACTION_CLAIM: uint8 = 1
-const LINKED_ACTION_TRANSFER_BUNDLE: uint8 = 2
 const LINKED_ACTION_CONVERT_LOCKED: uint8 = 3
-const LINKED_ACTION_CLAIM_WITHDRAW: uint8 = 4
 
 // ---- DNS records (TEP-81) ----
 type DnsRecords = map<uint256, cell>
@@ -62,8 +63,8 @@ struct CollectionSkeleton {
 
 struct CollectionMeta {
     priceConfig: Cell<PriceConfig>
-    collectionContent: cell  // TEP-64 offchain (collection)
-    itemContentBaseUri: cell // offchain prefix for items
+    autoRenewParent: bool
+    collectionContent: cell // immutable TEP-64 on-chain collection metadata
 }
 
 struct CollectionOrigin {
@@ -78,6 +79,7 @@ struct FactoryHandoffReceipt {
     requestQueryId: uint64
     intendedAdmin: address
     returnRequired: bool
+    returnInFlight: bool = false
 }
 
 struct PendingMint {
@@ -89,7 +91,8 @@ struct PendingMint {
 struct PendingParentReturn {
     returnQueryId: uint64
     requestQueryId: uint64
-    recipient: address?
+    recipient: address
+    inFlight: bool = false
 }
 
 struct CollectionPolicyState {
@@ -162,6 +165,7 @@ struct ParentReturnReply {
     returnQueryId: uint64
     requestQueryId: uint64
     recipient: address?
+    inFlight: bool = false
 }
 
 // =========================== ITEM (Tier 2) ===========================
@@ -177,13 +181,10 @@ struct ItemStorageInitialized {
     ownerAddress: address
     records: Cell<DnsRecords>
     label: Cell<RemainingBitsAndRefs>
+    content: cell      // immutable complete TEP-64 on-chain item metadata
     mintedAt: uint32
     lastTouch: uint32
     validUntil: uint32 // 0 = perpetual (reserved)
-}
-
-fun ItemStorageInitialized.save(self) {
-    contract.setData(self.toCell());
 }
 
 struct ItemLoader {

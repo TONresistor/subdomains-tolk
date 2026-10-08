@@ -6,7 +6,7 @@ import "storage"
 
 contract SubdomainItem {
     author: "tolk-subdomains"
-    version: "3.0.0"
+    version: "5.0.0"
     description: "Subdomain NFT item (TEP-62) holding its own DNS records."
     incomingMessages: AllowedItemMessage
     storage: ItemStorageInitialized
@@ -19,6 +19,21 @@ type AllowedItemMessage =
     | ChangeDnsRecord
     | GetStaticData
 
+fun ItemStorageInitialized.save(self) {
+    contract.setData(self.toCell());
+}
+
+fun isValidTep62ForwardPayload(payload: TransferForwardPayload): bool {
+    val (bits, refs) = payload.remainingBitsAndRefsCount();
+    if (bits == 0) {
+        return false;
+    }
+    if (payload.preloadUint(1) == 0) {
+        return true;
+    }
+    return bits == 1 && refs == 1;
+}
+
 @inline
 fun applyOwnershipTransfer(
     myBalance: coins,
@@ -27,6 +42,10 @@ fun applyOwnershipTransfer(
     transferData: TransferOwnershipData,
     fwdFees: coins,
 ) {
+    assert (
+        isValidTep62ForwardPayload(transferData.forwardPayload)
+    ) throw ERROR_INCORRECT_FORWARD_PAYLOAD;
+
     val newOwnerAddress = transferData.newOwnerAddress;
     newOwnerAddress.forceBasechain();
 
@@ -94,7 +113,7 @@ fun onInternalMessage(in: InMessage) {
         assert (init.index == uninit.index) throw ERROR_INDEX_MISMATCH;
         assert (init.label.load().hash() == uninit.index) throw ERROR_INDEX_MISMATCH;
 
-        var records: DnsRecords = init.initialRecords != null ? init.initialRecords.load() : [];
+        var records: DnsRecords = [];
         if (init.setWalletToMinter) {
             records.set(CAT_WALLET, buildWalletRecord(init.minter));
         }
@@ -106,6 +125,7 @@ fun onInternalMessage(in: InMessage) {
             ownerAddress: init.minter,
             records: records.toCell(),
             label: init.label,
+            content: init.content,
             mintedAt: now,
             lastTouch: now,
             validUntil: 0,
@@ -208,7 +228,7 @@ get fun get_nft_data(): ItemNftDataReply {
         index: st.index,
         collectionAddress: st.collectionAddress,
         ownerAddress: st.ownerAddress,
-        content: st.label as cell,
+        content: st.content,
     };
 }
 

@@ -16,10 +16,9 @@ fun createPayload(): RemainingBitsAndRefs {
     return beginCell().storeRef(makeMeta().toCell()).endCell().beginParse();
 }
 
-// Reproduction of the mainnet failure: thin factory balance (0.1) + the dApp's old forward (0.4).
-// Pre-fix this died in the action phase (code 37) stranding the NFT. Post-fix the guard refunds
-// instead (0.4 < MIN_CREATE_VALUE); the .ton always leaves the factory in the same transaction.
-get fun `test funding: mainnet repro - thin factory + 0.4 inbound never strands the NFT`() {
+// Regression for the old mainnet action-phase-37 failure: a thin factory must never strand the NFT.
+// The legacy 0.4 TON frontend funding remains above the reduced v4 exact minimum.
+get fun `test funding: thin factory and legacy 0.4 inbound complete safely`() {
     val owner = newActor("ofo");
     val parent = newActor("ofp");
     val factory = SubdomainFactory.fromStorage({ pending: [] });
@@ -40,6 +39,67 @@ get fun `test funding: mainnet repro - thin factory + 0.4 inbound never strands 
     expect(
         res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
     ).toBeNotNull();
+    expect(res.findTransaction({ from: factory.address, deploy: true })).toBeNotNull();
+}
+
+get fun `test funding: one nanotON below the Locked create minimum returns the parent`() {
+    val owner = newActor("locked-boundary-owner");
+    val parent = newActor("locked-boundary-parent");
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
+    factory.deploy(owner.address, { value: ton("0.01"), bounce: false });
+
+    val res = factory.sendOwnershipAssigned(
+        parent.address,
+        1,
+        owner.address,
+        createPayload(),
+        { value: MIN_CREATE_VALUE - 1, bounce: false },
+    );
+    expect(res).toHaveSuccessfulTx({ to: factory.address });
+    expect(
+        res.findTransaction<TransferOwnership>({ from: factory.address, to: parent.address }),
+    ).toBeNotNull();
+    expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
+}
+
+get fun `test funding: rejected custody returns immediately at its exact safety boundary`() {
+    val owner = newActor("rejected-boundary-owner");
+    val lowParent = newActor("rejected-boundary-low-parent");
+    val exactParent = newActor("rejected-boundary-exact-parent");
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
+    factory.deploy(owner.address, { value: ton("0.1"), bounce: false });
+    val junk = beginCell().storeRef(beginCell().storeUint(1, 1).endCell()).endCell().beginParse();
+
+    val low = testing.processSingleTraceStep(
+        lowParent.address,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: MIN_REJECTED_RETURN_VALUE - 1,
+            body: OwnershipAssigned {
+                queryId: 2,
+                oldOwnerAddress: owner.address,
+                payload: junk,
+            },
+        }),
+    );
+    expect(low.outMessages.size()).toEqual(0);
+
+    val exact = testing.processSingleTraceStep(
+        exactParent.address,
+        createMessage({
+            bounce: false,
+            dest: factory.address,
+            value: MIN_REJECTED_RETURN_VALUE,
+            body: OwnershipAssigned {
+                queryId: 3,
+                oldOwnerAddress: owner.address,
+                payload: junk,
+            },
+        }),
+    );
+    expect(exact.outMessages.size()).toEqual(1);
+    expect(exact.outMessages.at<TransferOwnership>(0).info.dest).toEqual(exactParent.address);
 }
 
 // The real worst case: factory's own balance nearly exhausted by storage and the inbound is the
@@ -68,6 +128,9 @@ get fun `test funding: create succeeds at exact minimum with a dust factory bala
     expect(coll.isLocked()).toEqual(true);
     expect(coll.getAdmin()).toEqual(owner.address);
     expect(coll.getPrice(5)).toEqual(ton("5")); // meta (price grid) parsed and live
+    expect(testing.getAccountBalance(coll.address)).toBeGreater(
+        testing.getAccountStorageFee(coll.address, 10 * 365 * 24 * 60 * 60)!,
+    );
 
     // the .ton hand-off left the factory
     expect(

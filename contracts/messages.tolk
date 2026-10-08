@@ -123,6 +123,22 @@ struct (0x48414e44) FactoryHandoff {
     intendedAdmin: address
 }
 
+fun parseFactoryHandoffPayload(payload: TransferForwardPayload): FactoryHandoff? {
+    var p = payload;
+    try {
+        val payloadInRef = p.loadBool();
+        if (!payloadInRef) {
+            return FactoryHandoff.fromSlice(p);
+        }
+        if (p.remainingBitsCount() != 0 || p.remainingRefsCount() != 1) {
+            return null;
+        }
+        return FactoryHandoff.fromCell(p.loadRef());
+    } catch {
+        return null;
+    }
+}
+
 // ---------------- Collection (Tier 1) ----------------
 struct (0x2428aaa6) SubdomainInit {
     queryId: uint64
@@ -130,7 +146,7 @@ struct (0x2428aaa6) SubdomainInit {
     minter: address
     label: Cell<RemainingBitsAndRefs>
     setWalletToMinter: bool
-    initialRecords: Cell<DnsRecords>?
+    content: cell
 }
 
 struct (0x49524459) ItemReady {
@@ -143,12 +159,7 @@ struct (0x49278399) RegisterSubdomain {
     queryId: uint64
     label: Cell<RemainingBitsAndRefs> // bare label bytes, e.g. "alice" (no trailing \0)
     setWalletToMinter: bool
-    initialRecords: Cell<DnsRecords>?
-}
-
-struct (0x7969d64e) SetContent {
-    queryId: uint64
-    meta: Cell<CollectionMeta>
+    content: cell
 }
 
 struct (0x1e4b7535) WithdrawFees {
@@ -215,6 +226,4 @@ struct (0x434d494e) ConfirmMint {
 // This struct is placed in the TEP-62 forward_payload, normally behind the Either ref bit.
 struct (0x4c4e4b33) LinkedParentAction {
     action: uint8
-    target: address?
-    amount: coins // only used by CLAIM_WITHDRAW; 0 means max
 }

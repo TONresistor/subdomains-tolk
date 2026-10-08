@@ -4,7 +4,6 @@ import "@acton/testing/expect"
 import "@contracts/dns-utils"
 import "@contracts/errors"
 import "@contracts/messages"
-import "@contracts/prices"
 import "@contracts/storage"
 import "@wrappers/SubdomainCollection.gen"
 import "@wrappers/SubdomainItem.gen"
@@ -21,38 +20,17 @@ get fun `test price: tiers vary by label length`() {
     expect(coll.getPrice(50)).toEqual(ton("0.1")); // 11+ flat
 }
 
-// Prices are immutable (fixed at lock); there is deliberately no set_price_config. set_content
-// edits only the metadata URIs and must preserve the price grid.
-get fun `test admin: set_content edits metadata but prices stay fixed`() {
+get fun `test metadata: collection content is immutable after deployment`() {
     val (coll, _parent, owner, _user) = deployLockedCollection();
-    val base = beginCell().storeUint(1, 8).storeSlice("https://gw/".beginParse()).endCell();
-    // try to sneak in a different price grid via set_content; it must be ignored
-    val tamper: PriceConfig = {
-        minChars: 4,
-        p1: ton("300"),
-        p2: ton("200"),
-        p3: ton("100"),
-        p4: ton("99"),
-        p5: ton("88"),
-        p6: ton("77"),
-        p7: ton("66"),
-        p8: ton("55"),
-        p9: ton("44"),
-        p10: ton("33"),
-        pRest: ton("22"),
-    };
-    val meta: CollectionMeta = {
-        priceConfig: tamper.toCell(),
-        collectionContent: base,
-        itemContentBaseUri: base,
-    };
-    val res = coll.sendSetContent(owner.address, 1, meta, { value: ton("1"), bounce: true });
+    val before = coll.getCollectionData().content.hash();
+    val res = coll.sendSetAccessMode(
+        owner.address,
+        1,
+        ACCESS_ADMIN_ONLY,
+        { value: ton("0.05"), bounce: true },
+    );
     expect(res).toHaveSuccessfulTx({ to: coll.address });
-
-    // the metadata base WAS updated (0x01 off-chain tag) ...
-    val content = coll.getNftContent(123, beginCell().storeSlice("alice".beginParse()).endCell());
-    expect(content.beginParse().preloadUint(8)).toEqual(1);
-    // ... but the price grid is UNCHANGED (immutable): still the default 5 TON for 5 chars, not 88
+    expect(coll.getCollectionData().content.hash()).toEqual(before);
     expect(coll.getPrice(5)).toEqual(ton("5"));
 }
 

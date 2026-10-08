@@ -5,6 +5,7 @@ import "@acton/env"
 import "@acton/io"
 import "@acton/emulation/network"
 import "@acton/emulation/scripts"
+import "@contracts/storage"
 import "@wrappers/SubdomainCollection.gen"
 
 fun main() {
@@ -19,7 +20,11 @@ fun main() {
     val coll = SubdomainCollection.fromAddress(collectionAddress!);
     println("Last parent fill-up (unix): {}", coll.getLastParentFillUp());
 
-    val res = coll.sendFillUpParent(keeper.address, 1, { value: ton("0.1"), bounce: true });
+    val res = coll.sendFillUpParent(
+        keeper.address,
+        1,
+        { value: MIN_PARENT_FILL, bounce: true },
+    );
     if (res.waitForFirstTransaction() == null) {
         println("Renew was not confirmed");
         return;

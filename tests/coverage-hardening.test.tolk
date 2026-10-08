@@ -14,11 +14,8 @@ import "@wrappers/SubdomainItem.gen"
 import "test-utils"
 
 fun gridPayload(grid: PriceConfig): RemainingBitsAndRefs {
-    val meta: CollectionMeta = {
-        priceConfig: grid.toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
-    };
+    var meta = makeMeta();
+    meta.priceConfig = grid.toCell();
     return beginCell().storeRef(meta.toCell()).endCell().beginParse();
 }
 
@@ -140,11 +137,8 @@ get fun `test cover: registry can set a 2-char minimum`() {
         p10: ton("0.5"),
         pRest: ton("0.1"),
     };
-    val meta: CollectionMeta = {
-        priceConfig: grid.toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
-    };
+    var meta = makeMeta();
+    meta.priceConfig = grid.toCell();
     coll.sendAny(
         masterT.address,
         LockCollection {
@@ -167,7 +161,7 @@ get fun `test cover: registry can set a 2-char minimum`() {
         2,
         labelSlice("a"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(one).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_TOO_SHORT });
@@ -221,11 +215,8 @@ get fun `test cover: short names price at their own tier`() {
         p10: ton("0.5"),
         pRest: ton("0.1"),
     };
-    val meta: CollectionMeta = {
-        priceConfig: grid.toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
-    };
+    var meta = makeMeta();
+    meta.priceConfig = grid.toCell();
     coll.sendAny(
         masterT.address,
         LockCollection {
@@ -248,7 +239,7 @@ get fun `test cover: short names price at their own tier`() {
         1,
         labelSlice("x"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("40"), bounce: true },
     ); // < 50
     expect(low).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_MINT_VALUE });
@@ -267,7 +258,7 @@ get fun `test cover: non-byte-aligned label is rejected`() {
         1,
         ragged,
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });
@@ -282,7 +273,7 @@ get fun `test cover: hyphen allowed interior, rejected at the edge`() {
         1,
         labelSlice("-abcd"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("50"), bounce: true },
     );
     expect(lead).toHaveFailedTx({ to: coll.address, exitCode: ERROR_LABEL_INVALID_CHARS });

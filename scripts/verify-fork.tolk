@@ -1,26 +1,30 @@
-// RED->GREEN against the REAL mainnet .ton DnsItem, offline, zero TON.
+// Fork verification against a real mainnet .ton DnsItem, offline with no broadcast.
 // Run: TONCENTER_MAINNET_API_KEY=... acton script scripts/verify-fork.tolk --fork-net mainnet
 //
-// Loads the real telegram-i00040.ton parent item (FunC nft-item.fc, real state) via fork,
-// then applies OUR v7 pin (key = CAT_DNS_NEXT_RESOLVER = sha256) impersonating its owner,
-// and shows the real contract's resolution flip from broken (null) to working (delegates).
+// Checks the standard resolver category, then exercises CLAIM, CONVERT_LOCKED and the complete
+// fee-minimized Locked Factory flow with the canonical parent contract and no broadcast.
 import "@acton/io"
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
 import "@contracts/dns-utils"
+import "@contracts/messages"
+import "@contracts/prices"
+import "@contracts/storage"
+import "@wrappers/SubdomainCollection.gen"
+import "@wrappers/SubdomainFactory.gen"
 
 struct DnsReply {
     prefixBits: int
     record: cell?
 }
 
-const RAW_NEXT_RESOLVER = "dns_next_resolver".toBase256() // the buggy v6 key, for contrast
+const RAW_NEXT_RESOLVER = "dns_next_resolver".toBase256() // legacy raw key, for contrast
 
 fun dotSlice(): slice {
     return beginCell().storeUint(0, 8).endCell().beginParse();
 }
 
-// internal name "\0test" — TEP-81 requires the leading \0 separator, then the label ("test")
+// Internal name "\0test": TEP-81 requires the leading \0 separator, then the label ("test").
 fun subTest(): slice {
     return beginCell().storeUint(0, 8).storeUint(0x74657374, 32).endCell().beginParse();
 }
@@ -29,9 +33,73 @@ fun resolveCat(item: address, sub: slice, cat: int): cell? {
     return net.runGetMethod<DnsReply>(item, "dnsresolve", [sub, cat]).record;
 }
 
+fun parentData(parent: address): ItemNftDataReply {
+    return net.runGetMethod(parent, "get_nft_data");
+}
+
+fun forkCollectionMeta(): CollectionMeta {
+    return {
+        priceConfig: defaultPriceConfig().toCell(),
+        autoRenewParent: true,
+        collectionContent: beginCell().storeUint(0, BYTE_SIZE).storeBool(false).endCell(),
+    };
+}
+
+fun linkedAction(action: uint8): TransferForwardPayload {
+    return beginCell()
+        .storeBool(true)
+        .storeRef(LinkedParentAction { action }.toCell())
+        .endCell()
+        .beginParse();
+}
+
+fun transferParent(
+    parent: address,
+    owner: address,
+    collection: address,
+    queryId: uint64,
+    action: uint8,
+) {
+    val transfer = createMessage({
+        bounce: true,
+        value: ton("0.2"),
+        dest: parent,
+        body: TransferOwnership {
+            queryId,
+            transferData: {
+                newOwnerAddress: collection,
+                responseDestination: owner,
+                customPayload: null,
+                forwardAmount: MIN_PARENT_RETURN_VALUE,
+                forwardPayload: linkedAction(action),
+            },
+        },
+    });
+    net.send(owner, transfer);
+}
+
+fun returnParent(parent: address, currentOwner: address, owner: address, queryId: uint64) {
+    val transfer = createMessage({
+        bounce: true,
+        value: ton("0.1"),
+        dest: parent,
+        body: TransferOwnership {
+            queryId,
+            transferData: {
+                newOwnerAddress: owner,
+                responseDestination: owner,
+                customPayload: null,
+                forwardAmount: 0,
+                forwardPayload: beginCell().endCell().beginParse(),
+            },
+        },
+    });
+    net.send(currentOwner, transfer);
+}
+
 fun main() {
     val parent = address("EQBV7GD_sEy3EQeFEjxeEzDbidjHIHaM0RMtMmlkJmXHRPvY"); // real telegram-i00040.ton
-    val owner = address("EQCPHzHuzLsch0Xj3PuhDgPuGwfMpeEaELox2QJQvpEFjPf1");  // its owner = our v6 collection
+    val owner = parentData(parent).ownerAddress!;
 
     println("== REAL mainnet telegram-i00040.ton (forked state) ==");
     println(
@@ -39,29 +107,29 @@ fun main() {
         resolveCat(parent, dotSlice(), CAT_DNS_NEXT_RESOLVER) != null ? "FOUND" : "null  <- RED",
     );
     println(
-        "next_resolver under raw bytes (v6 bug) : {}",
+        "next_resolver under raw bytes (legacy) : {}",
         resolveCat(parent, dotSlice(), RAW_NEXT_RESOLVER) != null
             ? "FOUND <- where the broken pin sits"
             : "null",
     );
 
-    // --- apply OUR v7 pin: change_dns_record(sha256 key, next_resolver -> collection), from the owner ---
+    // Apply the standard sha256 resolver key while impersonating the forked owner.
     val body = beginCell()
         .storeUint(0x4eb1f0f9, 32) // op::change_dns_record (real .ton item)
         .storeUint(1, 64) // query_id
-        .storeUint(CAT_DNS_NEXT_RESOLVER, 256) // <- OUR v7 key (sha256), the only thing we fixed
+        .storeUint(CAT_DNS_NEXT_RESOLVER, 256) // standard sha256 category
         .storeRef(owner.toNextResolver()) // value: dns_next_resolver -> collection
         .endCell();
 
     val resolverPinMessage = createMessage({
         bounce: false,
-        value: ton("0.1"),
+        value: RESOLVER_PIN_VALUE,
         dest: parent,
         body,
     });
     testing.processSingleTraceStep(owner, resolverPinMessage);
 
-    println("\n== after applying our v7 sha256 pin ==");
+    println("\n== after applying the standard sha256 pin ==");
     println(
         "next_resolver under sha256 (standard) : {}",
         resolveCat(parent, dotSlice(), CAT_DNS_NEXT_RESOLVER) != null ? "FOUND <- GREEN" : "null",
@@ -73,4 +141,88 @@ fun main() {
         "dnsresolve('test.<parent>') delegates : {}",
         deeper.record != null ? "next_resolver returned <- GREEN" : "null",
     );
+
+    val master = testing.treasury("fork-master");
+    testing.topUp(master.address, ton("10"));
+    val collection = SubdomainCollection.fromStorage({
+        master: master.address,
+        parentDomain: parent,
+        isLinked: true,
+        linkedAdmin: owner,
+    });
+    collection.deploy(master.address, { value: ton("1"), bounce: false });
+    collection.sendAny(
+        master.address,
+        LockCollection {
+            deploymentId: 1,
+            queryId: 1,
+            parentDomain: parent,
+            admin: owner,
+            isLinked: true,
+            meta: forkCollectionMeta().toCell(),
+        }.toCell(),
+        { value: ton("1"), bounce: false },
+    );
+    assert (collection.getIsLinked()) throw 1001;
+
+    transferParent(parent, owner, collection.address, 2, LINKED_ACTION_CLAIM);
+    assert (parentData(parent).ownerAddress! == owner) throw 1002;
+    assert (collection.getAdmin()! == owner) throw 1003;
+    assert (collection.getIsLinked()) throw 1004;
+    assert (!collection.getParentReturn().pending) throw 1005;
+    println("CLAIM at 0.01 TON                    : parent returned <- GREEN");
+
+    transferParent(parent, owner, collection.address, 3, LINKED_ACTION_CONVERT_LOCKED);
+    assert (parentData(parent).ownerAddress! == collection.address) throw 1006;
+    assert (collection.getAdmin()! == owner) throw 1007;
+    assert (!collection.getIsLinked()) throw 1008;
+    assert (!collection.getParentReturn().pending) throw 1009;
+    println("CONVERT_LOCKED at 0.01 TON           : collection owns parent <- GREEN");
+
+    // Restore the forked NFT to its original owner, then run the complete real DnsItem -> Factory
+    // -> Collection -> DnsItem -> Collection handoff with the current forward minimum.
+    returnParent(parent, collection.address, owner, 4);
+    assert (parentData(parent).ownerAddress! == owner) throw 1010;
+
+    val factory = SubdomainFactory.fromStorage({ pending: [] });
+    factory.deploy(master.address, { value: ton("0.1"), bounce: false });
+    val lockedCollectionAddress = factory.getCollectionAddress(parent);
+    val createLocked = createMessage({
+        bounce: true,
+        value: ton("0.3"),
+        dest: parent,
+        body: TransferOwnership {
+            queryId: 5,
+            transferData: {
+                newOwnerAddress: factory.address,
+                responseDestination: owner,
+                customPayload: null,
+                forwardAmount: MIN_CREATE_VALUE,
+                forwardPayload: beginCell()
+                    .storeRef(forkCollectionMeta().toCell())
+                    .endCell()
+                    .beginParse(),
+            },
+        },
+    });
+    net.send(owner, createLocked);
+    assert (testing.isDeployed(lockedCollectionAddress)) throw 1011;
+    val lockedCollection = SubdomainCollection.fromAddress(lockedCollectionAddress);
+    assert (lockedCollection.getAdmin()! == owner) throw 1012;
+    assert (!lockedCollection.getIsLinked()) throw 1013;
+    assert (parentData(parent).ownerAddress! == lockedCollectionAddress) throw 1014;
+    val pinned = resolveCat(parent, dotSlice(), CAT_DNS_NEXT_RESOLVER)!;
+    assert (DnsNextResolver.fromCell(pinned).resolver == lockedCollectionAddress) throw 1015;
+    println("LOCKED Factory forward at 0.20 TON   : full real DnsItem flow <- GREEN");
+
+    val fillTime = testing.getAccountState(lockedCollectionAddress)!.storageStat.lastPaid + 1;
+    testing.setNow(fillTime);
+    lockedCollection.sendFillUpParent(
+        master.address,
+        6,
+        { value: MIN_PARENT_FILL, bounce: true },
+    );
+    assert (net.runGetMethod<int>(parent, "get_last_fill_up_time") == fillTime) throw 1016;
+    assert (lockedCollection.getLastParentFillUp() == fillTime) throw 1017;
+    println("PARENT renew at 0.01 TON             : real DnsItem renewed <- GREEN");
 }

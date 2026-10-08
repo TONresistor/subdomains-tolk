@@ -2,7 +2,6 @@
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
 import "@acton/testing/expect"
-import "@contracts/dns-utils"
 import "@contracts/errors"
 import "@contracts/messages"
 import "@contracts/prices"
@@ -23,34 +22,12 @@ get fun `test elite: masterchain minter is rejected, label stays free`() {
         7,
         labelSlice("alice"),
         true,
-        null,
+        testOnchainMetadata(),
         { value: ton("20"), bounce: true },
     );
     expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_WRONG_WORKCHAIN });
 
     // the slot is untouched: a normal basechain mint of the same label still works
-    val (item, _r) = mintSubdomain(coll, user, "alice");
-    expect(testing.isDeployed(item.address)).toEqual(true);
-}
-
-// #1 mint-brick: malformed initialRecords fail at the collection (before minted.set), not as a
-// bounced item deploy that would brick the slot.
-get fun `test elite: malformed initialRecords are rejected before minting`() {
-    val (coll, _parent, _owner, user) = deployLockedCollection();
-    val badRecords = beginCell()
-        .storeUint(1, BYTE_SIZE)
-        .endCell() as Cell<DnsRecords>;                                                 // tag != 0x00
-
-    val res = coll.sendRegisterSubdomain(
-        user.address,
-        7,
-        labelSlice("alice"),
-        true,
-        badRecords,
-        { value: ton("20"), bounce: true },
-    );
-    expect(res).toHaveFailedTx({ to: coll.address, exitCode: ERROR_CONTENT_TAG_INVALID });
-
     val (item, _r) = mintSubdomain(coll, user, "alice");
     expect(testing.isDeployed(item.address)).toEqual(true);
 }
@@ -76,11 +53,8 @@ get fun `test elite: factory deploys a zero-price collection`() {
         p10: ton("0"),
         pRest: ton("0"),
     };
-    val freeMeta: CollectionMeta = {
-        priceConfig: freeGrid.toCell(),
-        collectionContent: beginCell().endCell(),
-        itemContentBaseUri: beginCell().endCell(),
-    };
+    var freeMeta = makeMeta();
+    freeMeta.priceConfig = freeGrid.toCell();
     val payload = beginCell().storeRef(freeMeta.toCell()).endCell().beginParse();
 
     val res = factory.sendOwnershipAssigned(
@@ -97,10 +71,18 @@ get fun `test elite: factory deploys a zero-price collection`() {
 get fun `test elite: enforce_resolver requires the caller to fund the pin`() {
     val (coll, parent, _owner, user) = deployLockedCollection();
 
-    val low = coll.sendEnforceResolver(user.address, 1, { value: ton("0.05"), bounce: true });
+    val low = coll.sendEnforceResolver(
+        user.address,
+        1,
+        { value: RESOLVER_PIN_FUND - 1, bounce: true },
+    );
     expect(low).toHaveFailedTx({ to: coll.address, exitCode: ERROR_INSUFFICIENT_BALANCE });
 
-    val ok = coll.sendEnforceResolver(user.address, 2, { value: ton("0.2"), bounce: true });
+    val ok = coll.sendEnforceResolver(
+        user.address,
+        2,
+        { value: RESOLVER_PIN_FUND, bounce: true },
+    );
     expect(ok).toHaveSuccessfulTx({ to: coll.address });
     expect(ok.findTransaction({ from: coll.address, to: parent.address })).toBeNotNull();
 }
@@ -180,4 +162,125 @@ get fun `test elite: masterchain parent is refunded and never deployed`() {
         res.findTransaction<TransferOwnership>({ from: factory.address, to: mcParent }),
     ).toBeNotNull();
     expect(res.findTransaction({ from: factory.address, deploy: true })).toEqual(null);
+}
+
+get fun `test elite: item rejects a missing TEP-62 Either selector`() {
+    val (coll, _parent, _owner, user) = deployLockedCollection();
+    val (item, _mint) = mintSubdomain(coll, user, "alice");
+    val buyer = newActor("tep62-missing-buyer");
+    val malformed: TransferOwnership = {
+        queryId: 1,
+        transferData: {
+            newOwnerAddress: buyer.address,
+            responseDestination: user.address,
+            customPayload: null,
+            forwardAmount: 0,
+            forwardPayload: emptyPayload(),
+        },
+    };
+
+    val result = item.sendAny(
+        user.address,
+        malformed.toCell(),
+        { value: ton("0.2"), bounce: true },
+    );
+    expect(result).toHaveFailedTx({
+        to: item.address,
+        exitCode: ERROR_INCORRECT_FORWARD_PAYLOAD,
+    });
+    expect(item.getEditor()).toEqual(user.address);
+}
+
+get fun `test elite: item rejects a malformed TEP-62 ref payload`() {
+    val (coll, _parent, _owner, user) = deployLockedCollection();
+    val (item, _mint) = mintSubdomain(coll, user, "alice");
+    val buyer = newActor("tep62-malformed-buyer");
+    val malformedPayload = beginCell()
+        .storeBool(true)
+        .storeUint(1, 1)
+        .storeRef(beginCell().endCell())
+        .endCell()
+        .beginParse();
+
+    val result = item.sendTransferOwnership(
+        user.address,
+        2,
+        {
+            newOwnerAddress: buyer.address,
+            responseDestination: user.address,
+            customPayload: null,
+            forwardAmount: 0,
+            forwardPayload: malformedPayload,
+        },
+        { value: ton("0.2"), bounce: true },
+    );
+    expect(result).toHaveFailedTx({
+        to: item.address,
+        exitCode: ERROR_INCORRECT_FORWARD_PAYLOAD,
+    });
+    expect(item.getEditor()).toEqual(user.address);
+}
+
+get fun `test elite: item accepts a valid TEP-62 ref payload`() {
+    val (coll, _parent, _owner, user) = deployLockedCollection();
+    val (item, _mint) = mintSubdomain(coll, user, "alice");
+    val buyer = newActor("tep62-ref-buyer");
+    val payload = beginCell()
+        .storeBool(true)
+        .storeRef(beginCell().storeUint(0xfeed, 16).endCell())
+        .endCell()
+        .beginParse();
+
+    val result = item.sendTransferOwnership(
+        user.address,
+        3,
+        {
+            newOwnerAddress: buyer.address,
+            responseDestination: user.address,
+            customPayload: null,
+            forwardAmount: ton("0.01"),
+            forwardPayload: payload,
+        },
+        { value: ton("0.2"), bounce: true },
+    );
+    expect(result).toHaveSuccessfulTx({ to: item.address });
+    expect(result).toHaveSuccessfulTx({ from: item.address, to: buyer.address });
+    expect(item.getEditor()).toEqual(buyer.address);
+}
+
+get fun `test elite: rescue interoperates with a strict TEP-62 item`() {
+    val (coll, _parent, owner, user) = deployLockedCollection();
+    val (item, _mint) = mintSubdomain(coll, user, "alice");
+
+    val deposit = item.sendTransferOwnership(
+        user.address,
+        3,
+        makeTransferData(coll.address, user.address, 0),
+        { value: ton("0.2"), bounce: true },
+    );
+    expect(deposit).toHaveSuccessfulTx({ to: item.address });
+    expect(item.getEditor()).toEqual(coll.address);
+
+    val rescue = coll.sendRescueNft(
+        owner.address,
+        4,
+        item.address,
+        user.address,
+        { value: ton("0.2"), bounce: true },
+    );
+    expect(rescue).toHaveSuccessfulTx({ from: coll.address, to: item.address });
+    expect(item.getEditor()).toEqual(user.address);
+}
+
+get fun `test elite: mint quote rejects a masterchain wallet`() {
+    val (coll, _parent, _owner, _user) = deployLockedCollection();
+    val masterchainWallet = address.fromWorkchainAndHash(
+        MASTERCHAIN,
+        labelIndex("quote-masterchain"),
+    );
+
+    val quote = coll.getMintQuote(masterchainWallet, 5);
+    expect(quote.allowed).toEqual(false);
+    expect(quote.effectivePrice).toEqual(ton("5"));
+    expect(quote.requiredValue).toEqual(ton("5") + ITEM_DEPLOY_COST + MINT_FEE_BUFFER);
 }
