@@ -274,7 +274,7 @@ get fun `test v5 fees: Locked no-renew parent never charges or sends a heartbeat
     expect(coll.getLastParentFillUp()).toEqual(lastFill);
 }
 
-get fun `test v4 fees: maximum label mints at the same exact base funding`() {
+get fun `test v4 fees: maximum label mints at its exact long-label quote`() {
     val (coll, _parent, _owner, user) = deployFreeCollection(false);
     var labelBuilder = beginCell();
     repeat (MAX_DOMAIN_SIZE) {
@@ -282,7 +282,7 @@ get fun `test v4 fees: maximum label mints at the same exact base funding`() {
     }
     val label = labelBuilder.endCell();
     val index = label.beginParse().hash();
-    val exact = ITEM_DEPLOY_COST + MINT_FEE_BUFFER;
+    val exact = ITEM_DEPLOY_COST + LONG_LABEL_MINT_FEE_BUFFER;
     val balanceBefore = testing.getAccountBalance(coll.address);
 
     val minted = coll.sendRegisterSubdomain(

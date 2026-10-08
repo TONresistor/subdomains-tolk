@@ -75,8 +75,10 @@ fun isParentHeartbeatDue(storage: CollectionStorage, nowTime: uint32): bool {
 fun calculateMintFunding(
     storage: CollectionStorage,
     nowTime: uint32,
+    charCount: int,
 ): coins {
-    var funding = ITEM_DEPLOY_COST + MINT_FEE_BUFFER;
+    val buffer = charCount > LONG_LABEL_THRESHOLD ? LONG_LABEL_MINT_FEE_BUFFER : MINT_FEE_BUFFER;
+    var funding = ITEM_DEPLOY_COST + buffer;
     if (isParentHeartbeatDue(storage, nowTime)) {
         funding += PARENT_HEARTBEAT_AMOUNT;
     }
@@ -330,7 +332,7 @@ fun processRegistration(
     val allowed = resolveMintAccess(policy, storage.admin, senderAddress);
     assert (allowed) throw ERROR_MINT_NOT_ALLOWED;
     val nowTime = blockchain.now();
-    val mintFunding = calculateMintFunding(storage, nowTime);
+    val mintFunding = calculateMintFunding(storage, nowTime, len / BYTE_SIZE);
     assert (inValue >= price + mintFunding) throw ERROR_INSUFFICIENT_MINT_VALUE;
 
     policy
@@ -1148,6 +1150,7 @@ get fun get_mint_quote(wallet: address, charCount: int): MintQuoteReply {
             calculateMintFunding(
                 storage,
                 blockchain.now(),
+                charCount,
             ),
     };
 }
